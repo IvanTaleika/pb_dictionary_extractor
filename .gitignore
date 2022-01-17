@@ -6,3 +6,5 @@ project/target
 .bsp
 .vscode
 .metals
+/dictionary
+*.sc
