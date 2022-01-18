@@ -19,26 +19,36 @@ class GoldenArea(
   import DictionaryRecord._
 
   private def pkMatches(t1: String, t2: String) =
-    pk.map(cn => colFromTable(t1)(cn) <=> colFromTable(t2)(cn)).reduce(_ && _)
+    pk.map(cn => colFromTable(t1)(cn) === colFromTable(t2)(cn)).reduce(_ && _)
   private val deltaPkMatches = pkMatches(tableName, stagingAlias)
 
-  override def upsert(updates: Dataset[DefinedWord],
-                      silverSnapshot: Dataset[DefinedWord]): Dataset[DictionaryRecord] = {
+  override def upsert(silverSnapshot: Dataset[DefinedWord]): Dataset[DictionaryRecord] = {
     import spark.implicits._
-    val definedUpdates = updates.where(col(DefinedWord.NORMALIZED_TEXT).isNotNull)
-    val updatedDefinitions =
-      silverSnapshot
-        .as("silverSnapshot")
-        .join(definedUpdates.as("definedUpdates"), pkMatches("silverSnapshot", "definedUpdates"), "left_semi")
-        .as[DefinedWord]
+    val updatedDefinitions = silverSnapshot
+      .transform(findUpdates)
+      .transform(
+        definedUpdates =>
+          silverSnapshot
+            .as("silverSnapshot")
+            .join(definedUpdates.as("definedUpdates"), pkMatches("silverSnapshot", "definedUpdates"), "left_semi")
+      )
+      .as[DefinedWord]
     val groupedDefinitions = fromSilver(updatedDefinitions)
-    val newDefinitions = groupedDefinitions
-      .as("groupedDefinitions")
-      .join(snapshot.as("snapshot"), pkMatches("groupedDefinitions", "snapshot"), "left_anti")
+    val (oldDefinitions, newDefinitions) = findNew(groupedDefinitions)
     val newDictionaryRecords = newDefinitions
       .transform(df => dictionaryTranslationApi.translate(df))
       .transform(df => usageFrequencyApi.findUsageFrequency(df))
-    updateArea(groupedDefinitions)(newDictionaryRecords)
+    updateArea(oldDefinitions)(newDictionaryRecords)
+  }
+
+  private def findNew(groupedDefinitions: DataFrame) = {
+    val newDefinitions = groupedDefinitions
+      .as("groupedDefinitions")
+      .join(snapshot.as("snapshot"), pkMatches("groupedDefinitions", "snapshot"), "left_anti")
+    val oldDefinitions = groupedDefinitions
+      .as("groupedDefinitions")
+      .join(newDefinitions.as("newDefinitions"), pkMatches("groupedDefinitions", "newDefinitions"), "left_anti")
+    (oldDefinitions, newDefinitions)
   }
 
   private[golden] def fromSilver(updatedDefinitions: Dataset[DefinedWord]): DataFrame = {
@@ -60,10 +70,8 @@ class GoldenArea(
     newGoldenRecords
   }
 
-  private[golden] def updateArea(allUpdates: DataFrame)(newRecords: DataFrame): Dataset[DictionaryRecord] = {
+  private[golden] def updateArea(oldDefinitions: DataFrame)(newDefinitions: DataFrame): Dataset[DictionaryRecord] = {
     val currentTimestamp = timestampProvider()
-    val oldDefinitions =
-      allUpdates.as("allUpdates").join(newRecords.as("newRecords"), pkMatches("allUpdates", "newRecords"), "left_anti")
 
     val metadataUpdate = UPDATED_AT -> lit(currentTimestamp)
 
@@ -74,13 +82,13 @@ class GoldenArea(
       .update(silverPropagatingCols.map(c => c -> colStaged(c)).toMap + metadataUpdate)
       .execute()
 
-    newRecords
+    newDefinitions
       .withColumn(UPDATED_AT, lit(currentTimestamp))
       .write
       .format("delta")
       .mode(SaveMode.Append)
       .save(absoluteTablePath)
 
-    snapshot.where(col(UPDATED_AT) === lit(currentTimestamp))
+    snapshot
   }
 }

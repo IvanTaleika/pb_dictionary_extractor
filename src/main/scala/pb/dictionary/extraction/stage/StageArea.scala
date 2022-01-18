@@ -1,20 +1,37 @@
 package pb.dictionary.extraction.stage
 
-import org.apache.spark.sql.{Dataset, Encoders, SaveMode}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoders, SaveMode}
 import org.apache.spark.sql.functions._
 import pb.dictionary.extraction.ApplicationManagedArea
 import pb.dictionary.extraction.device.DeviceHighlight
 
-class StageArea(val path: String) extends ApplicationManagedArea[DeviceHighlight, HighlightedSentence](path, "csv") {
+import java.sql.Timestamp
+import java.time.{ZonedDateTime, ZoneOffset}
+
+class StageArea(
+    path: String,
+    timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
+) extends ApplicationManagedArea[DeviceHighlight, HighlightedSentence](path, "csv") {
   import HighlightedSentence._
   import spark.implicits._
-  override protected def tableOptions = Map("multiline" -> "true", "header" -> "true", "mode" -> "FAILFAST")
+  override protected def tableOptions    = Map("multiline" -> "true", "header" -> "true", "mode" -> "FAILFAST")
+  override protected def tablePartitions = Seq(UPDATED_AT)
 
-  override def upsert(updates: Dataset[DeviceHighlight], snapshot: Dataset[DeviceHighlight]): Dataset[HighlightedSentence] = {
-    updates.transform(fromUserHighlights).transform(writeNew)
+  override protected def initTable(): Unit = {
+    super.initTable()
+    spark.sql(s"msck repair table ${fullTableName}")
   }
 
-  private def fromUserHighlights(userHighlights: Dataset[DeviceHighlight]): Dataset[HighlightedSentence] = {
+  override def upsert(previousSnapshot: Dataset[DeviceHighlight]): Dataset[HighlightedSentence] = {
+    previousSnapshot.transform(findUpdates).transform(fromUserHighlights).transform(writeNew)
+  }
+
+  override protected def findUpdates(previousSnapshot: Dataset[DeviceHighlight]) = {
+    // TODO: check filter pushdowns when working with DB
+    previousSnapshot.where(col(OID) > lit(latestOid))
+  }
+
+  private def fromUserHighlights(userHighlights: Dataset[DeviceHighlight]) = {
     val parsedValueCol = "parsedValue"
     userHighlights
       .withColumn(parsedValueCol, from_json(col(DeviceHighlight.VAL), Encoders.product[HighlightInfo].schema))
@@ -27,17 +44,20 @@ class StageArea(val path: String) extends ApplicationManagedArea[DeviceHighlight
         col(DeviceHighlight.AUTHORS),
         col(DeviceHighlight.TIME_EDT)
       )
-      .as[HighlightedSentence]
   }
 
-  private def writeNew(wordHighlights: Dataset[HighlightedSentence]): Dataset[HighlightedSentence] = {
-    // TODO: check filter pushdowns when working with DB
-    val newWordHighlights = wordHighlights.where(col(OID) > lit(latestOid))
-    newWordHighlights.write
+  private def writeNew(wordHighlights: DataFrame): Dataset[HighlightedSentence] = {
+    val updateTimestamp = timestampProvider()
+
+    wordHighlights
+      .withColumn(UPDATED_AT, lit(updateTimestamp))
+      .write
+      .partitionBy(tablePartitions: _*)
       .mode(SaveMode.Append)
       .format("csv")
       .saveAsTable(fullTableName)
-    newWordHighlights
+    spark.sql(s"msck repair table ${fullTableName}")
+    snapshot
   }
 
   private def latestOid: Long =

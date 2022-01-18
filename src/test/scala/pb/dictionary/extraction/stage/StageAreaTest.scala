@@ -11,9 +11,9 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
   describe("update method") {
     describe("Should parse highlights info, filtering out bookmarks") {
       describe("When table is empty") {
-        it("Write everything and return written record") {
+        it("Write everything") {
           import spark.implicits._
-          val area = new StageArea(areaPath)
+          val area = new StageArea(areaPath, testTimestampProvider)
           val highlights = spark.createDataset(
             Seq(
               DeviceHighlight(
@@ -51,7 +51,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
               )
             )
           )
-          val actual = area.upsert(highlights, null)
+          val actual = area.upsert(highlights)
           val expected = spark.createDataset(
             Seq(
               HighlightedSentence(
@@ -59,43 +59,53 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
                 "yacht.\"",
                 "The Great Gatsby",
                 "Francis Scott Fitzgerald",
-                2L
+                2L,
+                testTimestamp
               ),
               HighlightedSentence(
                 8920L,
                 "coroner",
                 "The Great Gatsby",
                 "Francis Scott Fitzgerald",
-                3L
+                3L,
+                testTimestamp
               ),
               HighlightedSentence(
                 19475L,
                 "prickle",
                 "Harry Potter and the Sorcerer's Stone",
                 "Joanne Kathleen Rowling",
-                4L
+                4L,
+                testTimestamp
               )
             ))
 
-          assertDataFrameDataEquals(actual.toDF(), expected.toDF())
-          assertDataFrameDataEquals(area.snapshot.toDF(), expected.toDF())
+          assertDataFrameDataEquals(expected.toDF(), actual.toDF())
         }
       }
       describe("When table is not empty") {
         it("Write records with IDs greater than the highest recorded in the table and return written records") {
           import spark.implicits._
-          val area = new StageArea(areaPath)
+          val firstTimestamp            = t"2021-01-01T01:01:01Z"
+          val secondTimestamp           = t"2021-01-01T01:01:02Z"
+          val timestampProvider = changingTimestampProvider(firstTimestamp, secondTimestamp)
+          val area = new StageArea(areaPath, timestampProvider)
           val currentState = spark.createDataset(
             Seq(
-              HighlightedSentence(
+              DeviceHighlight(
                 8920L,
-                "coroner",
+                """{
+                  "begin" : "pbr:/word?page=133&offs=1034",
+                  "end" : "pbr:/word?page=133&over=1040",
+                  "text" : "coroner",
+                  "updated" : "2019-10-07T16:16:01Z"
+                }""",
                 "The Great Gatsby",
                 "Francis Scott Fitzgerald",
                 3L
               )
             ))
-          currentState.write.mode(SaveMode.Append).format("csv").saveAsTable(area.fullTableName)
+          area.upsert(currentState)
           val highlights = spark.createDataset(
             Seq(
               DeviceHighlight(
@@ -133,7 +143,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
               )
             )
           )
-          val actual = area.upsert(highlights, null)
+          val actual = area.upsert(highlights)
           val expected = spark.createDataset(
             Seq(
               HighlightedSentence(
@@ -141,19 +151,29 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
                 "prickle",
                 "Harry Potter and the Sorcerer's Stone",
                 "Joanne Kathleen Rowling",
-                4L
+                4L,
+                secondTimestamp
+              ),
+              HighlightedSentence(
+                8920L,
+                "coroner",
+                "The Great Gatsby",
+                "Francis Scott Fitzgerald",
+                3L,
+                firstTimestamp
               )
             ))
-          val expectedState = currentState.unionByName(expected)
 
-          assertDataFrameDataEquals(actual.toDF(), expected.toDF())
-          assertDataFrameDataEquals(area.snapshot.toDF(), expectedState.toDF())
+          assertDataFrameDataEquals(expected.toDF(), actual.toDF())
         }
       }
 
       it("Should handle multiline records") {
         import spark.implicits._
-        val area = new StageArea(areaPath)
+        val firstTimestamp            = t"2021-01-01T01:01:01Z"
+        val secondTimestamp           = t"2021-01-01T01:01:02Z"
+        val timestampProvider = changingTimestampProvider(firstTimestamp, secondTimestamp)
+        val area = new StageArea(areaPath, timestampProvider)
         val firstUpdate = spark.createDataset(
           Seq(
             DeviceHighlight(
@@ -164,7 +184,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
               1L
             ),
           ))
-        area.upsert(firstUpdate, null)
+        area.upsert(firstUpdate)
         val secondUpdate = spark.createDataset(
           Seq(
             DeviceHighlight(
@@ -182,25 +202,27 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
               2L
             )
           ))
-        area.upsert(secondUpdate, null)
-        val expectedState = spark.createDataset(
+        val actual = area.upsert(secondUpdate)
+        val expected = spark.createDataset(
           Seq(
             HighlightedSentence(
               1L,
               "prickle\nprickle",
               "Harry Potter \nand the Sorcerer's Stone",
               "Joanne Kathleen \nRowling",
-              1L
+              1L,
+              firstTimestamp
             ),
             HighlightedSentence(
               2L,
               "yacht\nyacht",
               "The \nGreat Gatsby",
               "Francis \nScott Fitzgerald",
-              2L
+              2L,
+              secondTimestamp
             )
           ))
-        assertDataFrameDataEquals(area.snapshot.toDF(), expectedState.toDF())
+        assertDataFrameDataEquals(expected.toDF(), actual.toDF())
       }
     }
 

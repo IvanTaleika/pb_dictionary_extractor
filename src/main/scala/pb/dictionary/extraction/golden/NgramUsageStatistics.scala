@@ -18,7 +18,7 @@ class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyAp
     val textDf = df.select(ngramSearchCols: _*).distinct()
     val enrichedTextEncoder =
       RowEncoder.apply(textDf.schema.add(StructField(rawEnrichmentCol, StringType, nullable = true)))
-    val enrichedTextDf   = dfEnricher.enrich(df, enrichedTextEncoder)
+    val enrichedTextDf   = dfEnricher.enrich(textDf, enrichedTextEncoder)
     val textBooksUsageDf = parseUsageJson(enrichedTextDf)
     val sourceAlias      = "source"
     val enrichedAlias    = "enriched"
@@ -56,7 +56,7 @@ class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyAp
 object NgramUsageStatistics {
   type NgramDfEnricher = RemoteHttpDfEnricher[Row, Row]
   val ApiEndpoint       = "https://books.google.com/ngrams/json"
-  val SafeSingleTaskRps = 0.5
+  val SafeSingleTaskRps = 0.49
 
   def apply(corpus: String                = "eng_2019",
             yearStart: Int                = 2015,

@@ -8,7 +8,6 @@ import pb.dictionary.extraction.publish.GoogleSheets
 import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
-// FIXME: if any step fail, all other steps will loose information, cause update timestamp is lost
 object App {
 
   // APIs worth trying (partially based on https://medium.com/@martin.breuss/finding-a-useful-dictionary-api-52084a01503d)
@@ -62,12 +61,12 @@ object App {
                        goldenArea: GoldenArea,
                        publisher: Publisher) = {
     deviceHighlights.snapshot
-      .transform(df => stageArea.upsert(df, df))
-      .transform(df => bronze.upsert(df, stageArea.snapshot))
-      .transform(df => silverArea.upsert(df, bronze.snapshot ))
+      .transform(df => stageArea.upsert(df))
+      .transform(df => bronze.upsert(df))
+      .transform(df => silverArea.upsert(df))
       .transform(df =>
         // TODO: add manual definition file
-        goldenArea.upsert(df, silverArea.snapshot)
+        goldenArea.upsert(df)
       )
     println("Golden area was built successfully")
     // TODO: type safe?

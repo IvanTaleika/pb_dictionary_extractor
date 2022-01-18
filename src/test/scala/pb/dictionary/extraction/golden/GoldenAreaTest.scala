@@ -289,9 +289,9 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       Mockito
         .doReturn(expected, Nil: _*)
         .when(testObj)
-        .updateArea(argThatDataEqualsTo("updateArea1", fromSilverDf))(argThatDataEqualsTo("updateArea2", usageDf))
+        .updateArea(argThatDataEqualsTo("updateArea1", expectedDefinitionUpdates))(argThatDataEqualsTo("updateArea2", usageDf))
 
-      val actual = testObj.upsert(silverUpdates, silverSnapshot)
+      val actual = testObj.upsert(silverSnapshot)
       actual shouldBe expected
     }
   }
@@ -354,7 +354,6 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val actual   = area.updateArea(updates)(updates)
       val expected = updates.withColumn(UPDATED_AT, lit(testTimestamp)).as[DictionaryRecord]
       assertDataFrameDataEquals(expected.toDF(), actual.toDF())
-      assertDataFrameDataEquals(expected.toDF(), area.snapshot.toDF())
     }
 
     it("Should insert new definitions and update attributes for existing definitions") {
@@ -437,8 +436,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val enrichedNewDefinitions =
         newDefinitions.withColumn(TRANSLATION, lit("peevish translation")).withColumn(USAGE, lit(1d))
 
-      val updates = newDefinitions.unionByName(updatedDefinitions)
-      val actual  = area.updateArea(updates)(enrichedNewDefinitions)
+      val actual  = area.updateArea(updatedDefinitions)(enrichedNewDefinitions)
       val expectedUpdates = spark.createDataset(
         Seq(
           DictionaryRecord(
@@ -498,9 +496,8 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
           )
         )
       )
-      val expectedState = expectedUpdates.unionByName(expectedUnchangedRecords)
-      assertDataFrameDataEquals(expectedUpdates.toDF(), actual.toDF())
-      assertDataFrameDataEquals(expectedState.toDF(), area.snapshot.toDF())
+      val expected = expectedUpdates.unionByName(expectedUnchangedRecords)
+      assertDataFrameDataEquals(expected.toDF(), actual.toDF())
     }
 
     it("Should do nothing if there are no valid changes in SilverArea") {
@@ -549,10 +546,8 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val updates                = createDataFrame(fromSilverSchemaDdl)
       val enrichedNewDefinitions = createDataFrame(preMergeSchemaDdl)
       val actual                 = area.updateArea(updates)(enrichedNewDefinitions)
-      val expected               = spark.emptyDataset[DictionaryRecord]
-      val expectedState          = initialState.withColumn(UPDATED_AT, lit(firstTimestamp)).as[DictionaryRecord]
+      val expected               = initialState.withColumn(UPDATED_AT, lit(firstTimestamp)).as[DictionaryRecord]
       assertDataFrameDataEquals(expected.toDF(), actual.toDF())
-      assertDataFrameDataEquals(expectedState.toDF(), area.snapshot.toDF())
     }
   }
 

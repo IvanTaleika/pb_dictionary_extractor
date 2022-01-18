@@ -15,24 +15,25 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
       describe("When cleansed text is not yet exists in the area") {
         it("Inserts the records") {
           import spark.implicits._
-          val firstTimestamp    = t"2021-01-01T01:01:01Z"
-          val secondTimestamp   = t"2021-01-01T01:01:02Z"
+          val firstTimestamp    = t"2020-01-01T01:01:01Z"
+          val secondTimestamp   = t"2021-01-01T01:01:01Z"
           val timestampProvider = changingTimestampProvider(firstTimestamp, secondTimestamp)
           val area              = new BronzeArea(areaPath, timestampProvider)
 
-          val updates1 = spark.createDataset(
+          val snapshot1 = spark.createDataset(
             Seq(
               HighlightedSentence(
                 0L,
                 "zero!",
                 "Book0",
                 "Author0",
-                0L
+                0L,
+                t"2020-01-01T01:01:00Z"
               )
             )
           )
 
-          val actual1 = area.upsert(updates1, null)
+          val actual1 = area.upsert(snapshot1)
           val expected1 = spark.createDataset(
             Seq(
               CleansedWord(
@@ -46,121 +47,126 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
             )
           )
 
-          assertDataFrameDataEquals(actual1.toDF(), expected1.toDF())
-          assertDataFrameDataEquals(area.snapshot.toDF(), expected1.toDF())
+          assertDataFrameDataEquals(expected1.toDF(), actual1.toDF())
 
-          val updates2 = spark.createDataset(
-            Seq(
-              HighlightedSentence(
-                1L,
-                "one ,two,three",
-                "Book1",
-                "Author1",
-                1L
-              ),
-              HighlightedSentence(
-                2L,
-                ", one!TWO!three's",
-                "Book2",
-                "Author2",
-                2L
-              ),
-              HighlightedSentence(
-                3L,
-                "Four.four",
-                "Book1",
-                "Author1",
-                3L
-              ),
-              HighlightedSentence(
-                4L,
-                "A.a",
-                "Book1",
-                "Author1",
-                4L
-              ),
-            )
-          )
+          val snapshot2 = snapshot1.unionByName(
+            spark.createDataset(
+              Seq(
+                HighlightedSentence(
+                  1L,
+                  "one ,two,three",
+                  "Book1",
+                  "Author1",
+                  1L,
+                  t"2021-01-01T01:01:00Z"
+                ),
+                HighlightedSentence(
+                  2L,
+                  ", one!TWO!three's",
+                  "Book2",
+                  "Author2",
+                  2L,
+                  t"2021-01-01T01:01:00Z"
+                ),
+                HighlightedSentence(
+                  3L,
+                  "Four.four",
+                  "Book1",
+                  "Author1",
+                  3L,
+                  t"2021-01-01T01:01:00Z"
+                ),
+                HighlightedSentence(
+                  4L,
+                  "A.a",
+                  "Book1",
+                  "Author1",
+                  4L,
+                  t"2021-01-01T01:01:00Z"
+                ),
+              )
+            ))
 
-          val actual2 = area.upsert(updates2, null)
-          val expected2 = spark.createDataset(
-            Seq(
-              CleansedWord(
-                "one",
-                Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
-                2,
-                t"1970-01-01T00:00:01Z",
-                t"1970-01-01T00:00:02Z",
-                secondTimestamp,
-              ),
-              CleansedWord(
-                "two",
-                Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
-                2,
-                t"1970-01-01T00:00:01Z",
-                t"1970-01-01T00:00:02Z",
-                secondTimestamp,
-              ),
-              CleansedWord(
-                "three",
-                Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
-                2,
-                t"1970-01-01T00:00:01Z",
-                t"1970-01-01T00:00:02Z",
-                secondTimestamp,
-              ),
-              CleansedWord(
-                "four",
-                Seq("`Book1` BY `Author1`"),
-                2,
-                t"1970-01-01T00:00:03Z",
-                t"1970-01-01T00:00:03Z",
-                secondTimestamp,
-              ),
-            )
-          )
+          val actual2 = area.upsert(snapshot2)
+          val expected2 = expected1.unionByName(
+            spark.createDataset(
+              Seq(
+                CleansedWord(
+                  "one",
+                  Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
+                  2,
+                  t"1970-01-01T00:00:01Z",
+                  t"1970-01-01T00:00:02Z",
+                  secondTimestamp,
+                ),
+                CleansedWord(
+                  "two",
+                  Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
+                  2,
+                  t"1970-01-01T00:00:01Z",
+                  t"1970-01-01T00:00:02Z",
+                  secondTimestamp,
+                ),
+                CleansedWord(
+                  "three",
+                  Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
+                  2,
+                  t"1970-01-01T00:00:01Z",
+                  t"1970-01-01T00:00:02Z",
+                  secondTimestamp,
+                ),
+                CleansedWord(
+                  "four",
+                  Seq("`Book1` BY `Author1`"),
+                  2,
+                  t"1970-01-01T00:00:03Z",
+                  t"1970-01-01T00:00:03Z",
+                  secondTimestamp,
+                ),
+              )
+            ))
 
-          val expectedState2 = expected1.unionByName(expected2)
-
-          assertDataFrameDataEquals(actual2.toDF(), expected2.toDF())
-          assertDataFrameDataEquals(area.snapshot.toDF(), expectedState2.toDF())
+          assertDataFrameDataEquals(expected2.toDF(), actual2.toDF())
         }
       }
       describe("When cleansed text already exists in the area") {
         it(
           "Update the records, summing the occurrences, aggregating books, selecting min and max occurrences timestamps") {
           import spark.implicits._
-          val firstTimestamp            = t"2021-01-01T01:01:01Z"
-          val secondTimestamp           = t"2021-01-01T01:01:02Z"
+          val firstTimestamp    = t"2020-01-01T01:01:01Z"
+          val secondTimestamp   = t"2021-01-01T01:01:01Z"
           val timestampProvider = changingTimestampProvider(firstTimestamp, secondTimestamp)
           val area              = new BronzeArea(areaPath, timestampProvider)
 
-          val initialState = spark.createDataset(
+          val initialStageState = spark.createDataset(
             Seq(
               HighlightedSentence(
                 1L,
                 "one!Two",
                 "Book1",
                 "Author1",
-                1L
+                1L,
+                t"2020-01-01T01:01:00Z"
               ),
               HighlightedSentence(
                 2L,
                 ", one",
                 "Book2",
                 "Author2",
-                2L
+                2L,
+                t"2020-01-01T01:01:00Z"
               ),
               HighlightedSentence(
                 3L,
                 "Four.four",
                 "Book1",
                 "Author1",
-                3L
+                3L,
+                t"2020-01-01T01:01:00Z"
               )
             )
           )
-          area.upsert(initialState, null)
+          area.upsert(initialStageState)
 
           val updates = spark.createDataset(
             Seq(
@@ -169,43 +175,42 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                 "Two",
                 "Book1",
                 "Author1",
-                0L
+                0L,
+                t"2021-01-01T01:01:01Z"
               ),
               HighlightedSentence(
                 4L,
                 " Four ",
                 "Book3",
                 "Author3",
-                4L
+                4L,
+                t"2021-01-01T01:01:01Z"
               )
             )
           )
 
-          val actual = area.upsert(updates, null)
-          val expected = spark.createDataset(
-            Seq(
-              CleansedWord(
-                "two",
-                Seq("`Book1` BY `Author1`"),
-                2,
-                t"1970-01-01T00:00:00Z",
-                t"1970-01-01T00:00:01Z",
-                secondTimestamp,
-              ),
-              CleansedWord(
-                "four",
-                Seq("`Book1` BY `Author1`", "`Book3` BY `Author3`"),
-                3,
-                t"1970-01-01T00:00:03Z",
-                t"1970-01-01T00:00:04Z",
-                secondTimestamp,
-              ),
-            )
-          )
+          val stageSnapshot = initialStageState.unionByName(updates)
 
-          val expectedState = expected.unionByName(
+          val actual = area.upsert(stageSnapshot)
+          val expected =
             spark.createDataset(
               Seq(
+                CleansedWord(
+                  "two",
+                  Seq("`Book1` BY `Author1`"),
+                  2,
+                  t"1970-01-01T00:00:00Z",
+                  t"1970-01-01T00:00:01Z",
+                  secondTimestamp,
+                ),
+                CleansedWord(
+                  "four",
+                  Seq("`Book1` BY `Author1`", "`Book3` BY `Author3`"),
+                  3,
+                  t"1970-01-01T00:00:03Z",
+                  t"1970-01-01T00:00:04Z",
+                  secondTimestamp,
+                ),
                 CleansedWord(
                   "one",
                   Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
@@ -216,13 +221,9 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                 )
               )
             )
-          )
           val sortedActual = actual.withColumn(CleansedWord.BOOKS, array_sort(col(CleansedWord.BOOKS)))
-          val sortedActualState =
-            area.snapshot.withColumn(CleansedWord.BOOKS, array_sort(col(CleansedWord.BOOKS))).toDF()
 
-          assertDataFrameDataEquals(sortedActual, expected.toDF())
-          assertDataFrameDataEquals(sortedActualState, expectedState.toDF())
+          assertDataFrameDataEquals(expected.toDF(), sortedActual)
         }
       }
     }

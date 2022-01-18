@@ -73,7 +73,7 @@ class AppTest extends TestBase {
       }
 
       App.updateDictionary(deviceHighlights, stageArea, bronzeArea, silverArea, goldenArea, publish)
-//      Thread.sleep(1000000)
+      Thread.sleep(1000000)
     }
 
     it("Test ngrams max requests per second") {

@@ -70,7 +70,8 @@ class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDe
 object DictionaryApiDevWordDefiner {
   type DictionaryApiDevDfEnricher = RemoteHttpDfEnricher[CleansedWord, Row]
   val ApiEndpoint       = "https://api.dictionaryapi.dev/api/v2/entries/en"
-  val SafeSingleTaskRps = 0.5
+  // TODO: change base on time of the date
+  val SafeSingleTaskRps = 1
 
   def apply(maxConcurrentConnections: Int = 1): DictionaryApiDevWordDefiner = {
     val enricher: Option[Double] => DictionaryApiDevEnricher with ParallelRemoteHttpEnricher[CleansedWord, Row] =

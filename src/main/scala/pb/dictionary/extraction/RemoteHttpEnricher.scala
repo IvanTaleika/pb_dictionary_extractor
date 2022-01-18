@@ -24,6 +24,8 @@ abstract class RemoteHttpEnricher[In, Out](maxRequestsPerSecond: Option[Double] 
     rateLimiter.foreach(_.acquire())
     try {
       val response = httpClient.execute(request)
+      // FIXME: Debugger breakpoint triggers twice on the execute line, the `print` exists just to fix this
+      print("")
       try {
         if (successfulResponseStatuses.contains(response.getStatusLine.getStatusCode)) {
           EntityUtils.toString(response.getEntity, StandardCharsets.UTF_8)
@@ -67,7 +69,7 @@ class RemoteHttpDfEnricher[In, Out](enricherSummoner: Option[Double] => RemoteHt
     val adjusterRps =
       singleTaskRps.map(v => v / Math.max(ds.rdd.getNumPartitions, SparkSession.active.sparkContext.defaultParallelism))
     val enricher = enricherSummoner(adjusterRps)
-    ds.map(enricher.enrich, outEncoder).cache()
+    ds.cache().map(enricher.enrich, outEncoder).cache()
   }
 
 }

@@ -8,6 +8,7 @@ case class HighlightedSentence(
     title: String,
     authors: String,
     timeEdt: Long,
+    updatedAt: Timestamp
 )
 
 object HighlightedSentence {
@@ -16,6 +17,7 @@ object HighlightedSentence {
   val TITLE    = "title"
   val AUTHORS  = "authors"
   val TIME_EDT = "timeEdt"
+  val UPDATED_AT = "updatedAt"
 }
 
 case class HighlightInfo(

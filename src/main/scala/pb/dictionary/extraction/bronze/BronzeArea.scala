@@ -15,9 +15,8 @@ class BronzeArea(
 ) extends DeltaArea[HighlightedSentence, CleansedWord](path) {
   import CleansedWord._
 
-  override def upsert(updates: Dataset[HighlightedSentence],
-                      snapshot: Dataset[HighlightedSentence]): Dataset[CleansedWord] = {
-    updates.transform(fromStage).transform(writeNew)
+  override def upsert(previousSnapshot: Dataset[HighlightedSentence]): Dataset[CleansedWord] = {
+    previousSnapshot.transform(findUpdates).transform(fromStage).transform(updateArea)
   }
 
   private def fromStage(stage: Dataset[HighlightedSentence]): DataFrame = {
@@ -51,7 +50,7 @@ class BronzeArea(
       )
   }
 
-  private def writeNew(words: DataFrame): Dataset[CleansedWord] = {
+  private def updateArea(words: DataFrame): Dataset[CleansedWord] = {
     val updateTimestamp = timestampProvider()
     val mergeDf         = words.withColumn(UPDATED_AT, lit(updateTimestamp)).as(stagingAlias)
     deltaTable
@@ -69,6 +68,6 @@ class BronzeArea(
       .insertAll()
       .execute()
 
-    snapshot.where(col(UPDATED_AT) === lit(updateTimestamp))
+    snapshot
   }
 }

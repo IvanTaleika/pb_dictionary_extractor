@@ -17,25 +17,34 @@ class SilverArea(
   import DefinedWord._
   import spark.implicits._
 
-  override def upsert(updates: Dataset[CleansedWord], snapshot: Dataset[CleansedWord]): Dataset[DefinedWord] = {
-    updates.transform(findUndefined).transform(definitionApi.define).transform(updateArea(updates))
+  override def upsert(previousSnapshot: Dataset[CleansedWord]): Dataset[DefinedWord] = {
+    val (oldDefinitions, newDefinitions) = findUndefined(previousSnapshot.transform(findUpdates))
+    newDefinitions.transform(definitionApi.define).transform(updateArea(oldDefinitions))
   }
 
-  private def findUndefined(bronze: Dataset[CleansedWord]): Dataset[CleansedWord] = {
-    bronze.join(snapshot, Seq(TEXT), "left_anti").as[CleansedWord]
+  private def findUndefined(bronze: Dataset[CleansedWord]) = {
+    val newDefinitions = bronze.join(snapshot, Seq(TEXT), "left_anti").as[CleansedWord]
+    val oldDefinitions = bronze
+      .as("updates")
+      .join(
+        newDefinitions.as("definitions"),
+        col(s"updates.$TEXT") === col(s"definitions.$TEXT"),
+        "left_anti"
+      )
+      .as[CleansedWord]
+    (oldDefinitions, newDefinitions)
   }
 
-  private def updateArea(allUpdates: Dataset[CleansedWord])(
+  private def updateArea(oldDefinitions: Dataset[CleansedWord])(
       newDefinitions: Dataset[DefinedWord]): Dataset[DefinedWord] = {
     val currentTimestamp = timestampProvider()
-    val oldWords = allUpdates
-      .as("updates")
-      .join(newDefinitions.as("definitions"), col(s"updates.$TEXT") === col(s"definitions.$TEXT"), "left_anti")
+
     val metadataUpdate = UPDATED_AT -> lit(currentTimestamp)
 
+    // TODO: refactor to a single merge to make the operation atomic
     deltaTable
       .as(tableName)
-      .merge(oldWords.as(stagingAlias), colDelta(TEXT) === colStaged(TEXT))
+      .merge(oldDefinitions.toDF().as(stagingAlias), colDelta(TEXT) === colStaged(TEXT))
       .whenMatched()
       .update(bronzePropagatingCols.map(c => c -> colStaged(c)).toMap + metadataUpdate)
       .execute()
@@ -47,8 +56,7 @@ class SilverArea(
       .mode(SaveMode.Append)
       .save(absoluteTablePath)
 
-    val updates = snapshot.where(col(UPDATED_AT) === lit(currentTimestamp))
-    updates
+    snapshot
   }
 
 }

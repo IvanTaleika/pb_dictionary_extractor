@@ -88,7 +88,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
       initialState.write.format("delta").mode(SaveMode.Append).saveAsTable(area.fullTableName)
 
-      val updates = spark.createDataset(
+      val bronzeSnapshot = spark.createDataset(
         Seq(
           CleansedWord(
             "die hard",
@@ -99,69 +99,25 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             t"1999-01-04T01:01:01Z"
           ),
           CleansedWord(
-            "peevish",
-            Seq("testBook", "testBook2"),
-            3,
-            t"1998-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
-            t"1999-01-04T01:01:01Z"
-          )
-        )
-      )
-      val result = area.upsert(updates, null)
-      val expectedResult = spark.createDataset(
-        Seq(
-          DefinedWord(
-            "die hard",
-            Seq("testBook"),
-            2,
-            t"1999-01-02T01:01:01Z",
-            t"1999-01-03T01:01:01Z",
-            testTimestamp,
-            "die hard",
-            null,
-            null,
-            "disappear or change very slowly.",
-            "old habits die hard",
-            Seq.empty,
-            Seq.empty
-          ),
-          DefinedWord(
-            "die hard",
-            Seq("testBook"),
-            2,
-            t"1999-01-02T01:01:01Z",
-            t"1999-01-03T01:01:01Z",
-            testTimestamp,
             "diehard",
-            "ˈdʌɪhɑːd",
-            "noun",
-            "a person who strongly opposes change or who continues to support something in spite of opposition.",
-            "a diehard Yankees fan",
-            Seq("hard-line", "...", "blimp"),
-            Seq("modernizer")
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z"
           ),
-          DefinedWord(
+          CleansedWord(
             "peevish",
             Seq("testBook", "testBook2"),
             3,
             t"1998-01-01T01:01:01Z",
             t"1999-01-01T01:01:01Z",
-            testTimestamp,
-            "peevish",
-            "ˈpiːvɪʃ",
-            "adjective",
-            "having or showing an irritable disposition.",
-            "a thin peevish voice",
-            Seq("irritable", "...", "miffy"),
-            Seq("affable", "easy-going")
+            t"1999-01-04T01:01:01Z"
           )
         )
       )
-      assertDataFrameNoOrderEquals(result.toDF(), expectedResult.toDF())
-
-      val actualState = area.snapshot
-      val expectedState = spark.createDataset(
+      val actual = area.upsert(bronzeSnapshot)
+      val expected = spark.createDataset(
         Seq(
           DefinedWord(
             "die hard",
@@ -225,7 +181,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
           )
         )
       )
-      assertDataFrameNoOrderEquals(actualState.toDF(), expectedState.toDF())
+      assertDataFrameNoOrderEquals(expected.toDF(), actual.toDF())
     }
 
     it("Should send text to definition API and insert its result into the table if text isn't defined yet") {
@@ -297,6 +253,26 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
         .once()
       val area = new SilverArea(areaPath, wordDefinitionApi, testTimestampProvider)
 
+      val ingestedBronze = spark.createDataset(
+        Seq(
+          CleansedWord(
+            "die hard",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+          ),
+          CleansedWord(
+            "peevish",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+          ),
+        )
+      )
       val initialState = spark.createDataset(
         Seq(
           DefinedWord(
@@ -349,13 +325,11 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
       initialState.write.format("delta").mode(SaveMode.Append).saveAsTable(area.fullTableName)
 
-      val result = area.upsert(updates, null)
-      val expectedResult = definedUpdates.withColumn(DefinedWord.UPDATED_AT, lit(testTimestamp))
-      assertDataFrameDataEquals(result.toDF(), expectedResult)
-
-      val actualState = area.snapshot
-      val expectedState = initialState.toDF().unionByName(expectedResult)
-      assertDataFrameDataEquals(actualState.toDF(), expectedState)
+      val bronzeSnapshot = ingestedBronze.unionByName(updates)
+      val actual         = area.upsert(bronzeSnapshot)
+      val expected =
+        definedUpdates.withColumn(DefinedWord.UPDATED_AT, lit(testTimestamp)).unionByName(initialState.toDF())
+      assertDataFrameDataEquals(expected, actual.toDF())
     }
   }
 }

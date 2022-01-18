@@ -6,7 +6,7 @@ import org.apache.spark.sql.Dataset
 
 import scala.reflect.runtime.universe.TypeTag
 
-abstract class DeltaArea[In, Out <: Product: TypeTag](val path: String)
+abstract class DeltaArea[In, Out <: Product: TypeTag](path: String)
     extends ApplicationManagedArea[In, Out](path, "delta") {
   import spark.implicits._
   protected def deltaTable                                   = DeltaTable.forPath(absoluteTablePath)
