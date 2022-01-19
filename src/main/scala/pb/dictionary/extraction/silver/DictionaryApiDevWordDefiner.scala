@@ -1,14 +1,16 @@
 package pb.dictionary.extraction.silver
-import org.apache.http.client.methods.HttpGet
+import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet, HttpUriRequest}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField}
-import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher}
+import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher, RemoteHttpEnrichmentException}
 import pb.dictionary.extraction.bronze.CleansedWord
 import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner._
 
 import java.net.URLEncoder
+import java.time.{LocalTime, OffsetTime, ZoneId}
+import scala.util.Try
 
 class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDevDfEnricher) extends WordDefinitionApi {
   private val rawDefinitionCol = "rawDefinition"
@@ -69,13 +71,20 @@ class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDe
 
 object DictionaryApiDevWordDefiner {
   type DictionaryApiDevDfEnricher = RemoteHttpDfEnricher[CleansedWord, Row]
-  val ApiEndpoint       = "https://api.dictionaryapi.dev/api/v2/entries/en"
-  // TODO: change base on time of the date
-  val SafeSingleTaskRps = 1
+  val ApiEndpoint = "https://api.dictionaryapi.dev/api/v2/entries/en"
+
+  def SafeSingleTaskRps: Double = {
+    // rate limit is 450 request per 5 minutes. However, during USA day hours API just fails to keep up with request
+    if (OffsetTime.now(ZoneId.of("America/New_York")).toLocalTime.isAfter(LocalTime.of(8, 0))) {
+      0.49
+    } else {
+      1.49
+    }
+  }
 
   def apply(maxConcurrentConnections: Int = 1): DictionaryApiDevWordDefiner = {
-    val enricher: Option[Double] => DictionaryApiDevEnricher with ParallelRemoteHttpEnricher[CleansedWord, Row] =
-      new DictionaryApiDevEnricher(_) with ParallelRemoteHttpEnricher[CleansedWord, Row] {
+    val enricher: Option[Double] => DictionaryApiDevEnricher with DictionaryApiDevParallelHttpEnricher =
+      new DictionaryApiDevEnricher(_) with DictionaryApiDevParallelHttpEnricher {
         override protected val concurrentConnections = maxConcurrentConnections
       }
     new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(enricher, Option(SafeSingleTaskRps)))
@@ -132,4 +141,40 @@ abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(S
     val request = new HttpGet(url)
     request
   }
+
+  override protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest, i: Int) = {
+    import DictionaryApiDevEnricher._
+    response
+      .map(_ => super.processResponse(response)(request, i))
+      .recover {
+        // FIXME: Specialize exception
+        case e: Exception =>
+          logger.error(s"Request `${request}` has failed with exception", e)
+          if (i < MAX_ATTEMPTS) {
+            logger.warn(
+              s"Pausing requests execution before retrying the request `${request}`. Current attempt was `$i` from `$MAX_ATTEMPTS`")
+            pauseRequests(TOO_MANY_REQUESTS_PAUSE_TIME_MS)
+            None
+          } else {
+            val errorMessage =
+              s"Failed to execute request `${request}` in `$MAX_ATTEMPTS` attempts. " +
+                s"Aborting execution with the latest exception"
+            logger.error(errorMessage, e)
+            throw RemoteHttpEnrichmentException(errorMessage, e)
+          }
+      }
+      .get
+  }
+}
+
+object DictionaryApiDevEnricher {
+  private val MAX_ATTEMPTS = 3
+  // Rate limit is calculating over the 5 minutes window
+  private val TOO_MANY_REQUESTS_PAUSE_TIME_MS = 5 * 60 * 1000
+}
+
+trait DictionaryApiDevParallelHttpEnricher extends ParallelRemoteHttpEnricher[CleansedWord, Row] {
+  override protected def remoteHostConnectTimeout = 2 * 60 * 1000
+  override protected def socketResponseTimeout    = 3 * 60 * 1000
+  override protected def connectionManagerTimeout = 6 * 60 * 1000
 }

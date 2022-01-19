@@ -1,5 +1,6 @@
 package pb.dictionary.extraction
 
+import grizzled.slf4j.Logger
 import org.apache.spark.sql.SparkSession
 import pb.dictionary.extraction.bronze.BronzeArea
 import pb.dictionary.extraction.device.DeviceHighlights
@@ -9,7 +10,7 @@ import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
 object App {
-
+  private val logger = Logger(getClass)
   // APIs worth trying (partially based on https://medium.com/@martin.breuss/finding-a-useful-dictionary-api-52084a01503d)
   // Definition:
   // 1. https://dictionaryapi.dev/
@@ -66,8 +67,7 @@ object App {
       .transform(df => silverArea.upsert(df))
       .transform(df =>
         // TODO: add manual definition file
-        goldenArea.upsert(df)
-      )
+        goldenArea.upsert(df))
     println("Golden area was built successfully")
     // TODO: type safe?
 //    publisher.publish(goldenArea.snapshot.toDF)

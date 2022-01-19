@@ -57,6 +57,7 @@ class StageArea(
       .format("csv")
       .saveAsTable(fullTableName)
     spark.sql(s"msck repair table ${fullTableName}")
+    logger.info(s"Table `${fullTableName}` is updated successfully.")
     snapshot
   }
 

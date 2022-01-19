@@ -1,12 +1,15 @@
 package pb.dictionary.extraction.golden
-import org.apache.http.client.methods.HttpGet
+import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet, HttpUriRequest}
 import org.apache.http.client.utils.URIBuilder
+import org.apache.http.HttpStatus
 import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher}
+import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher, RemoteHttpEnrichmentException}
 import pb.dictionary.extraction.golden.NgramUsageStatistics._
+
+import scala.util.Try
 
 class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyApi {
   private val ngramSearchColNames = Seq(DictionaryRecord.NORMALIZED_TEXT, DictionaryRecord.PART_OF_SPEECH)
@@ -62,8 +65,8 @@ object NgramUsageStatistics {
             yearStart: Int                = 2015,
             yearEnd: Int                  = 2019,
             maxConcurrentConnections: Int = 1): NgramUsageStatistics = {
-    val client: Option[Double] => NgramEnricher with ParallelRemoteHttpEnricher[Row, Row] =
-      new NgramEnricher(corpus, yearStart, yearEnd)(_) with ParallelRemoteHttpEnricher[Row, Row] {
+    val client: Option[Double] => NgramEnricher with NgramParallelHttpEnricher =
+      new NgramEnricher(corpus, yearStart, yearEnd)(_) with NgramParallelHttpEnricher {
         override protected val concurrentConnections = maxConcurrentConnections
       }
     new NgramUsageStatistics(new NgramDfEnricher(client, Option(SafeSingleTaskRps)))
@@ -107,6 +110,7 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
     "article"      -> "DET",
   )
 
+
   override def enrich(record: Row): Row = {
     Row.fromSeq(record.toSeq :+ requestEnrichment(record))
   }
@@ -123,4 +127,35 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
     val request = new HttpGet(uri)
     request
   }
+
+  override protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest,  i: Int) = {
+    import NgramEnricher._
+    val successfulResponse = response.get
+    val statusLine         = successfulResponse.getStatusLine
+    statusLine.getStatusCode match {
+      case HttpStatus.SC_OK =>
+        super.processResponse(response)(request, i)
+      case SC_TOO_MANY_REQUESTS =>
+        logger.warn(s"Ngram API limit exceeded on request `${request}`.")
+        pauseRequests(TOO_MANY_REQUESTS_PAUSE_TIME_MS)
+        None
+      case _ =>
+        val body = super.processResponse(response)(request, i).get
+        throw RemoteHttpEnrichmentException(
+          s"Received response with unexpected statusCode for the request `${request}`." +
+            s" Response status line `$statusLine`, body `$body`")
+    }
+  }
+}
+
+object NgramEnricher {
+  private val SC_TOO_MANY_REQUESTS = 429
+  // ngram API allows 30 requests in 1 minutes. Pausing for 1 minute should reset the counter
+  private val TOO_MANY_REQUESTS_PAUSE_TIME_MS = 60 * 1000
+}
+
+trait NgramParallelHttpEnricher extends ParallelRemoteHttpEnricher[Row, Row] {
+  override protected def remoteHostConnectTimeout = 30 * 1000
+  override protected def socketResponseTimeout    = 1 * 60 * 1000
+  override protected def connectionManagerTimeout = 2 * 60 * 1000
 }

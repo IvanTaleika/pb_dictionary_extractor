@@ -14,6 +14,7 @@ abstract class ApplicationManagedArea[In, Out <: Product: TypeTag](val path: Str
   val absoluteDatabasePath       = absoluteLocation.getParent.toUri.toString
   val databaseName               = absoluteLocation.getParent.getFileName.toString
   val fullTableName              = s"$databaseName.$tableName"
+  logger.info(s"Initializing `$format` table `$databaseName`.`$tableName`.")
   initTable()
 
   /** Upsert records from lower tier area by PK and returns new records. */

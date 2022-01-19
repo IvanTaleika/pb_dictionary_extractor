@@ -7,6 +7,7 @@ import org.mockito.Mockito
 import pb.dictionary.extraction.ApplicationManagedAreaTestBase
 import pb.dictionary.extraction.silver.DefinedWord
 
+// TODO: test that nulls do not propagate in the area
 class GoldenAreaTest extends ApplicationManagedAreaTestBase {
   import DictionaryRecord._
   var preMergeSchema: StructType   = _

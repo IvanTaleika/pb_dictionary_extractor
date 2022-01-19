@@ -1,13 +1,14 @@
 package pb.dictionary.extraction
 
 import com.google.common.util.concurrent.RateLimiter
+import grizzled.slf4j.Logger
 import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.functions.lit
 import pb.dictionary.extraction.bronze.{BronzeArea, CleansedWord}
 import pb.dictionary.extraction.device.{DeviceHighlight, DeviceHighlights}
 import pb.dictionary.extraction.golden._
 import pb.dictionary.extraction.publish.GoogleSheets
-import pb.dictionary.extraction.silver.{DictionaryApiDevEnricher, DictionaryApiDevWordDefiner, SilverArea}
+import pb.dictionary.extraction.silver.{DictionaryApiDevEnricher, DictionaryApiDevParallelHttpEnricher, DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
 import scala.collection.mutable.ArrayBuffer
@@ -76,16 +77,17 @@ class AppTest extends TestBase {
       Thread.sleep(1000000)
     }
 
+    // TODO: move tests to RemoteHttpEnricher test class
     it("Test ngrams max requests per second") {
-      val api        = new NgramEnricher("eng_2019", 2015, 2019)() with ParallelRemoteHttpEnricher[Row, Row]
+      val api        = new NgramEnricher("eng_2019", 2015, 2019)(Option(10)) with NgramParallelHttpEnricher
       val testRecord = createDataFrame("normalizedText String, partOfSpeech String", Row("duck", "noun")).head
       testApiRequestLimit(api, testRecord, (res: Row) => res.getString(2) == null, 2 * 60 * 1000)
     }
 
     it("Test Dictionary Api Dev max requests per second") {
-      val api        = new DictionaryApiDevEnricher() with ParallelRemoteHttpEnricher[CleansedWord, Row]
+      val api        = new DictionaryApiDevEnricher(Option(10)) with DictionaryApiDevParallelHttpEnricher
       val testRecord = CleansedWord("duck", null, -1, null, null, null)
-      testApiRequestLimit(api, testRecord, (res: Row) => res.getString(6) == null, 2 * 60 * 1000)
+      testApiRequestLimit(api, testRecord, (res: Row) => res.getString(6) == null, 6 * 60 * 1000)
     }
 
     def testApiRequestLimit[T1, T2](
@@ -127,6 +129,7 @@ class AppTest extends TestBase {
       } while (execTimes.last - execTimes.head < maxRunningTimeMillis)
       println(executionReport("timeout"))
     }
+
 
 //    it("should work with real db") {
 //      val localSpark = spark

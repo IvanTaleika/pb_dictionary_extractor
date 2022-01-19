@@ -1,47 +1,82 @@
 package pb.dictionary.extraction
 
 import com.google.common.util.concurrent.RateLimiter
-import org.apache.http.HttpStatus
-import org.apache.http.client.methods.HttpUriRequest
+import grizzled.slf4j.Logger
+import org.apache.http.client.config.RequestConfig
+import org.apache.http.client.methods.{CloseableHttpResponse, HttpUriRequest}
 import org.apache.http.impl.client.{CloseableHttpClient, HttpClientBuilder}
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
 import org.apache.http.util.EntityUtils
 import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
 
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.{ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
+import scala.util.Try
 
-abstract class RemoteHttpEnricher[In, Out](maxRequestsPerSecond: Option[Double] = None) extends Serializable {
+abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: Option[Double] = None)
+    extends Serializable {
+  protected lazy val logger                         = Logger(getClass)
+  private lazy val requestPauseLock                 = new ReentrantLock()
+  private lazy val requestLock                      = new ReentrantReadWriteLock()
   private lazy val rateLimiter: Option[RateLimiter] = maxRequestsPerSecond.map(RateLimiter.create)
 
   def enrich(record: In): Out
 
-  protected def successfulResponseStatuses: Set[Int] = Set(HttpStatus.SC_OK)
   protected def httpClient: CloseableHttpClient
   protected def buildRequest(record: In): HttpUriRequest
 
   protected def requestEnrichment(record: In): String = {
-    val request = buildRequest(record)
-    rateLimiter.foreach(_.acquire())
-    try {
-      val response = httpClient.execute(request)
-      // FIXME: Debugger breakpoint triggers twice on the execute line, the `print` exists just to fix this
-      print("")
-      try {
-        if (successfulResponseStatuses.contains(response.getStatusLine.getStatusCode)) {
-          EntityUtils.toString(response.getEntity, StandardCharsets.UTF_8)
-        } else {
-          null
-        }
-      } finally {
-        response.close()
+    val request    = buildRequest(record)
+    var enrichment = Option.empty[String]
+    var i          = 1
+    do {
+      if (!requestLock.readLock().tryLock()) {
+        logger.info(s"Waiting request execution to unlock for `${request}`.")
+        requestLock.readLock().lock()
       }
-    } catch {
-      case e: Exception =>
-        // FIXME: api.dictionaryapi.dev was down after a relatively small number of requests (no proofs on the number though)
-        //  we need to have some exception handling mechanism + request timeouts + throttle
-        throw e
+      val response = try {
+        logger.info(
+          s"Throttling request `${request}`. Request rate `${rateLimiter.map(r => s"$r per second").getOrElse("unlimited")}`")
+        rateLimiter.foreach(_.acquire())
+        logger.info(s"Executing request `${request}`. Attempt `$i`.")
+        Try(httpClient.execute(request))
+      } finally {
+        requestLock.readLock().unlock()
+      }
+      try {
+        enrichment = processResponse(response)(request, i)
+      } finally {
+        response.map(_.close())
+      }
+      i += 1
+      if (enrichment.isEmpty)
+        logger.info(s"Failed to receive enrichment for the request `${request}`. Awaiting next attempt `${i}`")
+    } while (enrichment.isEmpty)
+    val enrichmentString = enrichment.get
+    logger.info(s"Received enrichment for the request `${request}`. Enrichment size `${enrichmentString.length}`")
+    enrichmentString
+  }
+
+  protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest, i: Int) = {
+    Option(EntityUtils.toString(response.get.getEntity, StandardCharsets.UTF_8))
+  }
+
+  protected def pauseRequests(pauseTimeMs: Int): Unit = {
+    if (requestPauseLock.tryLock()) {
+      requestLock.writeLock().lock()
+      logger.warn(s"Pausing requests execution for ${pauseTimeMs} ms.")
+      try {
+        Thread.sleep(pauseTimeMs)
+      } finally {
+        requestLock.writeLock().unlock()
+        requestPauseLock.unlock()
+      }
+    } else {
+      logger.warn(s"Requests are already paused by another thread.")
     }
   }
+
 }
 
 trait ParallelRemoteHttpEnricher[In, Out] extends RemoteHttpEnricher[In, Out] {
@@ -49,12 +84,25 @@ trait ParallelRemoteHttpEnricher[In, Out] extends RemoteHttpEnricher[In, Out] {
   // Spark default value is 1
   protected def concurrentConnections: Int = 1
 
+  protected def remoteHostConnectTimeout: Int
+  protected def socketResponseTimeout: Int
+  protected def connectionManagerTimeout: Int
+
   override lazy val httpClient: CloseableHttpClient = {
+    val requestConfig = RequestConfig.custom
+      .setConnectTimeout(remoteHostConnectTimeout)
+      .setSocketTimeout(socketResponseTimeout)
+      .setConnectionRequestTimeout(connectionManagerTimeout)
+      .build
     val connManager = new PoolingHttpClientConnectionManager
     connManager.setMaxTotal(concurrentConnections)
     // This class queries a single HTTP route only
     connManager.setDefaultMaxPerRoute(concurrentConnections)
-    HttpClientBuilder.create().setConnectionManager(connManager).build()
+    HttpClientBuilder
+      .create()
+      .setConnectionManager(connManager)
+      .setDefaultRequestConfig(requestConfig)
+      .build()
   }
 }
 
@@ -71,5 +119,9 @@ class RemoteHttpDfEnricher[In, Out](enricherSummoner: Option[Double] => RemoteHt
     val enricher = enricherSummoner(adjusterRps)
     ds.cache().map(enricher.enrich, outEncoder).cache()
   }
+}
 
+case class RemoteHttpEnrichmentException(message: String, cause: Throwable) extends Exception(message, cause)
+object RemoteHttpEnrichmentException {
+  def apply(message: String) = new RemoteHttpEnrichmentException(message, null)
 }

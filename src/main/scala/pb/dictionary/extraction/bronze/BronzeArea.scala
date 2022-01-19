@@ -67,6 +67,7 @@ class BronzeArea(
       .whenNotMatched()
       .insertAll()
       .execute()
+    logger.info(s"Table `${fullTableName}` is updated successfully.")
 
     snapshot
   }

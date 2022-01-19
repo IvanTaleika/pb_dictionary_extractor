@@ -56,6 +56,8 @@ class SilverArea(
       .mode(SaveMode.Append)
       .save(absoluteTablePath)
 
+    logger.info(s"Table `${fullTableName}` is updated successfully.")
+
     snapshot
   }
 
