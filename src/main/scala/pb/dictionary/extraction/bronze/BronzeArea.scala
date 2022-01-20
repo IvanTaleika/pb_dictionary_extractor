@@ -4,7 +4,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 import pb.dictionary.extraction.DeltaArea
-import pb.dictionary.extraction.stage.HighlightedSentence
+import pb.dictionary.extraction.stage.HighlightedText
 
 import java.sql.Timestamp
 import java.time.{ZonedDateTime, ZoneOffset}
@@ -12,14 +12,14 @@ import java.time.{ZonedDateTime, ZoneOffset}
 class BronzeArea(
     path: String,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends DeltaArea[HighlightedSentence, CleansedWord](path) {
-  import CleansedWord._
+) extends DeltaArea[HighlightedText, CleansedText](path) {
+  import CleansedText._
 
-  override def upsert(previousSnapshot: Dataset[HighlightedSentence]): Dataset[CleansedWord] = {
+  override def upsert(previousSnapshot: Dataset[HighlightedText]): Dataset[CleansedText] = {
     previousSnapshot.transform(findUpdates).transform(fromStage).transform(updateArea)
   }
 
-  private def fromStage(stage: Dataset[HighlightedSentence]): DataFrame = {
+  private def fromStage(stage: Dataset[HighlightedText]): DataFrame = {
     val tokensArrCol = "tokensArr"
     val tokenCol     = "token"
     // Punctuation is a bit messy in a PocketBook. It often sticks to words.
@@ -27,7 +27,7 @@ class BronzeArea(
     // a single word, you mark a series, separated by punctuation.
     // We split text by punctuation in order to not loss any meaningful information.
     val clearedStage = stage
-      .withColumn(tokensArrCol, split(col(HighlightedSentence.TEXT), """[^\w\-\s]"""))
+      .withColumn(tokensArrCol, split(col(HighlightedText.TEXT), """[^\w\-\s]"""))
       .transform { df =>
         val cols = df.columns.map(col)
         df.select(cols :+ explode(col(tokensArrCol)).as(tokenCol): _*)
@@ -36,21 +36,21 @@ class BronzeArea(
       .where(length(col(tokenCol)) > 1)
       .select(
         trim(lower(col(tokenCol))) as TEXT,
-        format_string("`%s` BY `%s`", col(HighlightedSentence.TITLE), col(HighlightedSentence.AUTHORS)) as BOOKS,
-        to_timestamp(from_unixtime(col(HighlightedSentence.TIME_EDT))) as HighlightedSentence.TIME_EDT,
+        format_string("`%s` BY `%s`", col(HighlightedText.TITLE), col(HighlightedText.AUTHORS)) as BOOKS,
+        to_timestamp(from_unixtime(col(HighlightedText.TIME_EDT))) as HighlightedText.TIME_EDT,
       )
 
     clearedStage
       .groupBy(TEXT)
       .agg(
         collect_set(BOOKS) as BOOKS,
-        count("*") cast IntegerType as CleansedWord.OCCURRENCES,
-        min(HighlightedSentence.TIME_EDT) as CleansedWord.FIRST_OCCURRENCE,
-        max(HighlightedSentence.TIME_EDT) as CleansedWord.LATEST_OCCURRENCE
+        count("*") cast IntegerType as CleansedText.OCCURRENCES,
+        min(HighlightedText.TIME_EDT) as CleansedText.FIRST_OCCURRENCE,
+        max(HighlightedText.TIME_EDT) as CleansedText.LATEST_OCCURRENCE
       )
   }
 
-  private def updateArea(words: DataFrame): Dataset[CleansedWord] = {
+  private def updateArea(words: DataFrame): Dataset[CleansedText] = {
     val updateTimestamp = timestampProvider()
     val mergeDf         = words.withColumn(UPDATED_AT, lit(updateTimestamp)).as(stagingAlias)
     deltaTable

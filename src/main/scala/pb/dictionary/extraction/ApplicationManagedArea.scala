@@ -50,4 +50,8 @@ abstract class ApplicationManagedArea[In, Out <: Product: TypeTag](val path: Str
     previousSnapshot.where(condition)
   }
 
+  override def snapshot: Dataset[Out] = {
+    import spark.implicits._
+    spark.table(fullTableName).as[Out]
+  }
 }

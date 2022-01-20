@@ -1,17 +1,15 @@
-package pb.dictionary.extraction.bronze
+package pb.dictionary.extraction.publish
 
-import java.sql.Timestamp
-
-case class CleansedText(
+case class UndefinedText(
     text: String,
-    books: Seq[String],
+    books: String,
     occurrences: Int,
-    firstOccurrence: Timestamp,
-    latestOccurrence: Timestamp,
-    updatedAt: Timestamp
+    firstOccurrence: String,
+    latestOccurrence: String,
+    updatedAt: String
 )
 
-object CleansedText {
+object UndefinedText {
   val TEXT              = "text"
   val BOOKS             = "books"
   val OCCURRENCES       = "occurrences"

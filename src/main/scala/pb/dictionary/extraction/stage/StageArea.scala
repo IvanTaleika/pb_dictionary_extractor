@@ -11,8 +11,8 @@ import java.time.{ZonedDateTime, ZoneOffset}
 class StageArea(
     path: String,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends ApplicationManagedArea[DeviceHighlight, HighlightedSentence](path, "csv") {
-  import HighlightedSentence._
+) extends ApplicationManagedArea[DeviceHighlight, HighlightedText](path, "csv") {
+  import HighlightedText._
   import spark.implicits._
   override protected def tableOptions    = Map("multiline" -> "true", "header" -> "true", "mode" -> "FAILFAST")
   override protected def tablePartitions = Seq(UPDATED_AT)
@@ -22,7 +22,7 @@ class StageArea(
     spark.sql(s"msck repair table ${fullTableName}")
   }
 
-  override def upsert(previousSnapshot: Dataset[DeviceHighlight]): Dataset[HighlightedSentence] = {
+  override def upsert(previousSnapshot: Dataset[DeviceHighlight]): Dataset[HighlightedText] = {
     previousSnapshot.transform(findUpdates).transform(fromUserHighlights).transform(writeNew)
   }
 
@@ -39,14 +39,14 @@ class StageArea(
       .where(col(parsedValueCol)(HighlightInfo.BEGIN).isNotNull)
       .select(
         col(DeviceHighlight.OID),
-        col(parsedValueCol)(HighlightInfo.TEXT) as HighlightedSentence.TEXT,
+        col(parsedValueCol)(HighlightInfo.TEXT) as HighlightedText.TEXT,
         col(DeviceHighlight.TITLE),
         col(DeviceHighlight.AUTHORS),
         col(DeviceHighlight.TIME_EDT)
       )
   }
 
-  private def writeNew(wordHighlights: DataFrame): Dataset[HighlightedSentence] = {
+  private def writeNew(wordHighlights: DataFrame): Dataset[HighlightedText] = {
     val updateTimestamp = timestampProvider()
 
     wordHighlights
@@ -63,9 +63,5 @@ class StageArea(
 
   private def latestOid: Long =
     snapshot.select(OID).orderBy(col(OID).desc).as[Long].collect().headOption.getOrElse(Integer.MIN_VALUE)
-
-  override def snapshot: Dataset[HighlightedSentence] = {
-    spark.table(fullTableName).as[HighlightedSentence]
-  }
 
 }

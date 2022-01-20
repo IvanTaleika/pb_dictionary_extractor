@@ -2,7 +2,7 @@ package pb.dictionary.extraction.bronze
 
 import org.apache.spark.sql.functions._
 import pb.dictionary.extraction.ApplicationManagedAreaTestBase
-import pb.dictionary.extraction.stage.HighlightedSentence
+import pb.dictionary.extraction.stage.HighlightedText
 
 import java.sql.Timestamp
 
@@ -22,7 +22,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
 
           val snapshot1 = spark.createDataset(
             Seq(
-              HighlightedSentence(
+              HighlightedText(
                 0L,
                 "zero!",
                 "Book0",
@@ -36,7 +36,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
           val actual1 = area.upsert(snapshot1)
           val expected1 = spark.createDataset(
             Seq(
-              CleansedWord(
+              CleansedText(
                 "zero",
                 Seq("`Book0` BY `Author0`"),
                 1,
@@ -52,7 +52,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
           val snapshot2 = snapshot1.unionByName(
             spark.createDataset(
               Seq(
-                HighlightedSentence(
+                HighlightedText(
                   1L,
                   "one ,two,three",
                   "Book1",
@@ -60,7 +60,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                   1L,
                   t"2021-01-01T01:01:00Z"
                 ),
-                HighlightedSentence(
+                HighlightedText(
                   2L,
                   ", one!TWO!three's",
                   "Book2",
@@ -68,7 +68,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                   2L,
                   t"2021-01-01T01:01:00Z"
                 ),
-                HighlightedSentence(
+                HighlightedText(
                   3L,
                   "Four.four",
                   "Book1",
@@ -76,7 +76,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                   3L,
                   t"2021-01-01T01:01:00Z"
                 ),
-                HighlightedSentence(
+                HighlightedText(
                   4L,
                   "A.a",
                   "Book1",
@@ -91,7 +91,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
           val expected2 = expected1.unionByName(
             spark.createDataset(
               Seq(
-                CleansedWord(
+                CleansedText(
                   "one",
                   Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
                   2,
@@ -99,7 +99,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                   t"1970-01-01T00:00:02Z",
                   secondTimestamp,
                 ),
-                CleansedWord(
+                CleansedText(
                   "two",
                   Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
                   2,
@@ -107,7 +107,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                   t"1970-01-01T00:00:02Z",
                   secondTimestamp,
                 ),
-                CleansedWord(
+                CleansedText(
                   "three",
                   Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
                   2,
@@ -115,7 +115,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                   t"1970-01-01T00:00:02Z",
                   secondTimestamp,
                 ),
-                CleansedWord(
+                CleansedText(
                   "four",
                   Seq("`Book1` BY `Author1`"),
                   2,
@@ -140,7 +140,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
 
           val initialStageState = spark.createDataset(
             Seq(
-              HighlightedSentence(
+              HighlightedText(
                 1L,
                 "one!Two",
                 "Book1",
@@ -148,7 +148,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                 1L,
                 t"2020-01-01T01:01:00Z"
               ),
-              HighlightedSentence(
+              HighlightedText(
                 2L,
                 ", one",
                 "Book2",
@@ -156,7 +156,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                 2L,
                 t"2020-01-01T01:01:00Z"
               ),
-              HighlightedSentence(
+              HighlightedText(
                 3L,
                 "Four.four",
                 "Book1",
@@ -170,7 +170,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
 
           val updates = spark.createDataset(
             Seq(
-              HighlightedSentence(
+              HighlightedText(
                 0L,
                 "Two",
                 "Book1",
@@ -178,7 +178,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                 0L,
                 t"2021-01-01T01:01:01Z"
               ),
-              HighlightedSentence(
+              HighlightedText(
                 4L,
                 " Four ",
                 "Book3",
@@ -195,7 +195,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
           val expected =
             spark.createDataset(
               Seq(
-                CleansedWord(
+                CleansedText(
                   "two",
                   Seq("`Book1` BY `Author1`"),
                   2,
@@ -203,7 +203,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                   t"1970-01-01T00:00:01Z",
                   secondTimestamp,
                 ),
-                CleansedWord(
+                CleansedText(
                   "four",
                   Seq("`Book1` BY `Author1`", "`Book3` BY `Author3`"),
                   3,
@@ -211,7 +211,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                   t"1970-01-01T00:00:04Z",
                   secondTimestamp,
                 ),
-                CleansedWord(
+                CleansedText(
                   "one",
                   Seq("`Book1` BY `Author1`", "`Book2` BY `Author2`"),
                   2,
@@ -221,7 +221,7 @@ class BronzeAreaTest extends ApplicationManagedAreaTestBase {
                 )
               )
             )
-          val sortedActual = actual.withColumn(CleansedWord.BOOKS, array_sort(col(CleansedWord.BOOKS)))
+          val sortedActual = actual.withColumn(CleansedText.BOOKS, array_sort(col(CleansedText.BOOKS)))
 
           assertDataFrameDataEquals(expected.toDF(), sortedActual)
         }

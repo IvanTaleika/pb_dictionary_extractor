@@ -5,7 +5,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 import pb.dictionary.extraction.DeltaArea
-import pb.dictionary.extraction.silver.DefinedWord
+import pb.dictionary.extraction.silver.DefinedText
 
 import java.sql.Timestamp
 import java.time.{ZonedDateTime, ZoneOffset}
@@ -15,14 +15,14 @@ class GoldenArea(
     dictionaryTranslationApi: DictionaryTranslationApi,
     usageFrequencyApi: UsageFrequencyApi,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends DeltaArea[DefinedWord, DictionaryRecord](path) {
+) extends DeltaArea[DefinedText, DictionaryRecord](path) {
   import DictionaryRecord._
 
   private def pkMatches(t1: String, t2: String) =
     pk.map(cn => colFromTable(t1)(cn) === colFromTable(t2)(cn)).reduce(_ && _)
   private val deltaPkMatches = pkMatches(tableName, stagingAlias)
 
-  override def upsert(silverSnapshot: Dataset[DefinedWord]): Dataset[DictionaryRecord] = {
+  override def upsert(silverSnapshot: Dataset[DefinedText]): Dataset[DictionaryRecord] = {
     import spark.implicits._
     val updatedDefinitions = silverSnapshot
       .transform(findUpdates)
@@ -32,7 +32,7 @@ class GoldenArea(
             .as("silverSnapshot")
             .join(definedUpdates.as("definedUpdates"), pkMatches("silverSnapshot", "definedUpdates"), "left_semi")
       )
-      .as[DefinedWord]
+      .as[DefinedText]
     val groupedDefinitions = fromSilver(updatedDefinitions)
     val (oldDefinitions, newDefinitions) = findNew(groupedDefinitions)
     val newDictionaryRecords = newDefinitions
@@ -51,20 +51,20 @@ class GoldenArea(
     (oldDefinitions, newDefinitions)
   }
 
-  private[golden] def fromSilver(updatedDefinitions: Dataset[DefinedWord]): DataFrame = {
+  private[golden] def fromSilver(updatedDefinitions: Dataset[DefinedText]): DataFrame = {
     val pkCols               = pk.map(col)
-    val updateTimeWindow     = Window.partitionBy(pkCols: _*).orderBy(col(DefinedWord.UPDATED_AT).desc_nulls_last)
+    val updateTimeWindow     = Window.partitionBy(pkCols: _*).orderBy(col(DefinedText.UPDATED_AT).desc_nulls_last)
     val definitionAttributes = Seq(SYNONYMS, ANTONYMS, PHONETIC, PART_OF_SPEECH, EXAMPLE)
     val latestDefinitionAttributes = definitionAttributes
       .foldLeft(updatedDefinitions.toDF)((df, cn) => df.withColumn(cn, first(cn).over(updateTimeWindow)))
     val newGoldenRecords = latestDefinitionAttributes
       .groupBy((pkCols ++ definitionAttributes.map(col)): _*)
       .agg(
-        collect_set(DefinedWord.TEXT) as DictionaryRecord.FORMS,
-        flatten(collect_set(col(DefinedWord.BOOKS))) as DictionaryRecord.BOOKS,
-        sum(DefinedWord.OCCURRENCES) cast IntegerType as DictionaryRecord.OCCURRENCES,
-        min(DefinedWord.FIRST_OCCURRENCE) as DictionaryRecord.FIRST_OCCURRENCE,
-        max(DefinedWord.LATEST_OCCURRENCE) as DictionaryRecord.LATEST_OCCURRENCE,
+        collect_set(DefinedText.TEXT) as DictionaryRecord.FORMS,
+        flatten(collect_set(col(DefinedText.BOOKS))) as DictionaryRecord.BOOKS,
+        sum(DefinedText.OCCURRENCES) cast IntegerType as DictionaryRecord.OCCURRENCES,
+        min(DefinedText.FIRST_OCCURRENCE) as DictionaryRecord.FIRST_OCCURRENCE,
+        max(DefinedText.LATEST_OCCURRENCE) as DictionaryRecord.LATEST_OCCURRENCE,
       )
       .withColumn(BOOKS, array_distinct(col(BOOKS)))
     newGoldenRecords

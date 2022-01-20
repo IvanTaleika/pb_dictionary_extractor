@@ -2,7 +2,7 @@ package pb.dictionary.extraction.silver
 
 import java.sql.Timestamp
 
-case class DefinedWord(
+case class DefinedText(
     text: String,
     books: Seq[String],
     occurrences: Int,
@@ -18,7 +18,7 @@ case class DefinedWord(
     antonyms: Seq[String]
 )
 
-object DefinedWord {
+object DefinedText {
 
   // bronze
   val TEXT              = "text"

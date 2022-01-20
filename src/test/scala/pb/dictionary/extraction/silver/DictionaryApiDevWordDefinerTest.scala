@@ -7,11 +7,11 @@ import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.message.BasicStatusLine
 import org.apache.http.protocol.HttpContext
 import pb.dictionary.extraction.TestBase
-import pb.dictionary.extraction.bronze.CleansedWord
+import pb.dictionary.extraction.bronze.CleansedText
 import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner.DictionaryApiDevDfEnricher
 
 class DictionaryApiDevWordDefinerTest extends TestBase {
-  import pb.dictionary.extraction.bronze.CleansedWord._
+  import pb.dictionary.extraction.bronze.CleansedText._
 
   val sourceSchema =
     s"$TEXT String, $BOOKS Array<String>, $OCCURRENCES Int, $FIRST_OCCURRENCE Timestamp, $LATEST_OCCURRENCE Timestamp, $UPDATED_AT Timestamp"
@@ -20,7 +20,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
     import spark.implicits._
     spark.createDataset(
       Seq(
-        CleansedWord(
+        CleansedText(
           text,
           Seq("testBook"),
           1,
@@ -51,7 +51,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
         val actual  = definer.define(df)
         val expected = spark.createDataset(
           Seq(
-            DefinedWord(
+            DefinedText(
               "agsbgf",
               Seq("testBook"),
               1,
@@ -81,7 +81,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
         val actual  = definer.define(df)
         val expected = spark.createDataset(
           Seq(
-            DefinedWord(
+            DefinedText(
               "hello",
               Seq("testBook"),
               1,
@@ -148,7 +148,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
         val actual  = definer.define(df)
         val expected = spark.createDataset(
           Seq(
-            DefinedWord(
+            DefinedText(
               "peevish",
               Seq("testBook"),
               1,
@@ -230,7 +230,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
           val actual  = definer.define(df)
           val expected = spark.createDataset(
             Seq(
-              DefinedWord(
+              DefinedText(
                 "die hard",
                 Seq("testBook"),
                 1,
@@ -245,7 +245,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 Seq.empty,
                 Seq.empty
               ),
-              DefinedWord(
+              DefinedText(
                 "die hard",
                 Seq("testBook"),
                 1,
@@ -312,7 +312,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
           val actual  = definer.define(df)
           val expected = spark.createDataset(
             Seq(
-              DefinedWord(
+              DefinedText(
                 "duck",
                 Seq("testBook"),
                 1,
@@ -327,7 +327,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 Seq.empty,
                 Seq.empty
               ),
-              DefinedWord(
+              DefinedText(
                 "duck",
                 Seq("testBook"),
                 1,
@@ -342,7 +342,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 Seq.empty,
                 Seq.empty
               ),
-              DefinedWord(
+              DefinedText(
                 "duck",
                 Seq("testBook"),
                 1,

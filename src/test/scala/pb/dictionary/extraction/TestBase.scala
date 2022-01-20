@@ -1,6 +1,7 @@
 package pb.dictionary.extraction
 
 import com.holdenkarau.spark.testing.{DataFrameSuiteBase, DatasetSuiteBase}
+import grizzled.slf4j.Logger
 import org.apache.http.{HttpHost, HttpRequest}
 import org.apache.http.client.methods.CloseableHttpResponse
 import org.apache.http.impl.client.CloseableHttpClient
@@ -25,6 +26,7 @@ abstract class TestBase
     with MockFactory
     with DataFrameSuiteBase {
   val warehousePath = "target/spark-warehouse"
+  protected val logger = Logger(getClass)
 
   override def conf: SparkConf =
     super.conf

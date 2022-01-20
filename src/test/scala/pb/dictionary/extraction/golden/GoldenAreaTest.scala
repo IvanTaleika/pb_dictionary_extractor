@@ -5,7 +5,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.mockito.Mockito
 import pb.dictionary.extraction.ApplicationManagedAreaTestBase
-import pb.dictionary.extraction.silver.DefinedWord
+import pb.dictionary.extraction.silver.DefinedText
 
 // TODO: test that nulls do not propagate in the area
 class GoldenAreaTest extends ApplicationManagedAreaTestBase {
@@ -40,7 +40,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val testObj                  = Mockito.spy(area)
       val validUpdates = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "diehard",
             Seq("diehard Book"),
             1,
@@ -55,7 +55,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
-          DefinedWord(
+          DefinedText(
             "ducks",
             Seq("ducks Book"),
             1,
@@ -70,7 +70,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("duck synonym"),
             Seq("duck antonym"),
           ),
-          DefinedWord(
+          DefinedText(
             "peevish",
             Seq("peevish Book"),
             1,
@@ -89,7 +89,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       )
       val invalidUpdates = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "aaa",
             Seq("aaa Book"),
             1,
@@ -109,7 +109,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val silverUpdates = validUpdates.unionByName(invalidUpdates)
       val silverUpdatedDefinitions = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "die hard",
             Seq("die hard Book"),
             1,
@@ -124,7 +124,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
-          DefinedWord(
+          DefinedText(
             "duck",
             Seq("duck Book"),
             1,
@@ -143,7 +143,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       )
       val silverUnchangedRecords = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "die hard",
             Seq("die hard Book"),
             1,
@@ -158,7 +158,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq.empty,
             Seq.empty
           ),
-          DefinedWord(
+          DefinedText(
             "bbb",
             Seq("aaa Book"),
             1,
@@ -560,7 +560,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val area = new GoldenArea(areaPath, null, null)
       val definedFords = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "ducks",
             Seq("ducks Book"),
             2,
@@ -575,7 +575,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq.empty,
             Seq.empty,
           ),
-          DefinedWord(
+          DefinedText(
             "duck",
             Seq("duck Book"),
             1,
@@ -590,7 +590,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("duck synonym"),
             Seq("duck antonym"),
           ),
-          DefinedWord(
+          DefinedText(
             "duck",
             Seq("duck Book"),
             2,
@@ -605,7 +605,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("duck synonym"),
             Seq("duck antonym"),
           ),
-          DefinedWord(
+          DefinedText(
             "ducking",
             Seq("duck verb Book"),
             1,
@@ -620,7 +620,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("bob down"),
             Seq("straighten up"),
           ),
-          DefinedWord(
+          DefinedText(
             "duck",
             Seq("duck verb Book"),
             1,
@@ -635,7 +635,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("bob down", "bend (down)"),
             Seq("straighten up", "stand"),
           ),
-          DefinedWord(
+          DefinedText(
             "ducked",
             Seq("duck verb Book 2"),
             1,

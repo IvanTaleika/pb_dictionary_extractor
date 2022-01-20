@@ -8,9 +8,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 abstract class DeltaArea[In, Out <: Product: TypeTag](path: String)
     extends ApplicationManagedArea[In, Out](path, "delta") {
-  import spark.implicits._
   protected def deltaTable                                   = DeltaTable.forPath(absoluteTablePath)
-  override def snapshot: Dataset[Out]                        = deltaTable.toDF.as[Out]
   protected def stagingAlias                                 = "staging"
   protected def colFromTable(tableAlias: String)(cn: String) = col(s"$tableAlias.$cn")
   protected def colDelta(cn: String)                         = colFromTable(tableName)(cn)

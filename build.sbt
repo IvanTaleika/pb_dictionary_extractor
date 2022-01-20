@@ -25,3 +25,6 @@ libraryDependencies := Seq(
 excludeDependencies ++= Seq(
   ExclusionRule("org.slf4j", "slf4j-log4j12")
 )
+
+// In intellij IDEA - modify ScalaTest template, passing `-l org.scalatest.tags.Slow` in `Program arguments`
+testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-l", "org.scalatest.tags.Slow")

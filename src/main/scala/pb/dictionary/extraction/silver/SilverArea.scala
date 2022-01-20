@@ -3,7 +3,7 @@ package pb.dictionary.extraction.silver
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import pb.dictionary.extraction.DeltaArea
-import pb.dictionary.extraction.bronze.CleansedWord
+import pb.dictionary.extraction.bronze.CleansedText
 
 import java.sql.Timestamp
 import java.time.{ZonedDateTime, ZoneOffset}
@@ -13,17 +13,18 @@ class SilverArea(
     path: String,
     definitionApi: WordDefinitionApi,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends DeltaArea[CleansedWord, DefinedWord](path) {
-  import DefinedWord._
+) extends DeltaArea[CleansedText, DefinedText](path) {
+  import DefinedText._
   import spark.implicits._
 
-  override def upsert(previousSnapshot: Dataset[CleansedWord]): Dataset[DefinedWord] = {
+  override def upsert(previousSnapshot: Dataset[CleansedText]): Dataset[DefinedText] = {
     val (oldDefinitions, newDefinitions) = findUndefined(previousSnapshot.transform(findUpdates))
     newDefinitions.transform(definitionApi.define).transform(updateArea(oldDefinitions))
   }
 
-  private def findUndefined(bronze: Dataset[CleansedWord]) = {
-    val newDefinitions = bronze.join(snapshot, Seq(TEXT), "left_anti").as[CleansedWord]
+  // TODO: retry definition search for old words without definitions?
+  private def findUndefined(bronze: Dataset[CleansedText]) = {
+    val newDefinitions = bronze.join(snapshot, Seq(TEXT), "left_anti").as[CleansedText]
     val oldDefinitions = bronze
       .as("updates")
       .join(
@@ -31,12 +32,12 @@ class SilverArea(
         col(s"updates.$TEXT") === col(s"definitions.$TEXT"),
         "left_anti"
       )
-      .as[CleansedWord]
+      .as[CleansedText]
     (oldDefinitions, newDefinitions)
   }
 
-  private def updateArea(oldDefinitions: Dataset[CleansedWord])(
-      newDefinitions: Dataset[DefinedWord]): Dataset[DefinedWord] = {
+  private def updateArea(oldDefinitions: Dataset[CleansedText])(
+      newDefinitions: Dataset[DefinedText]): Dataset[DefinedText] = {
     val currentTimestamp = timestampProvider()
 
     val metadataUpdate = UPDATED_AT -> lit(currentTimestamp)

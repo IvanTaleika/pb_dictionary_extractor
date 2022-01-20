@@ -4,7 +4,7 @@ import org.apache.spark.sql.{Dataset, SaveMode}
 import org.apache.spark.sql.functions.{col, lit}
 import org.scalamock.function.FunctionAdapter1
 import pb.dictionary.extraction.ApplicationManagedAreaTestBase
-import pb.dictionary.extraction.bronze.CleansedWord
+import pb.dictionary.extraction.bronze.CleansedText
 
 class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
@@ -16,14 +16,14 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
       val wordDefinitionApi = mock[WordDefinitionApi]
       (wordDefinitionApi.define _)
-        .expects(new FunctionAdapter1[Dataset[CleansedWord], Boolean](ds => ds.isEmpty))
+        .expects(new FunctionAdapter1[Dataset[CleansedText], Boolean](ds => ds.isEmpty))
         .returns(spark.emptyDataset)
         .once()
       val area = new SilverArea(areaPath, wordDefinitionApi, testTimestampProvider)
 
       val initialState = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "die hard",
             Seq("testBook"),
             1,
@@ -38,7 +38,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq.empty,
             Seq.empty
           ),
-          DefinedWord(
+          DefinedText(
             "die hard",
             Seq("testBook"),
             1,
@@ -53,7 +53,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
-          DefinedWord(
+          DefinedText(
             "diehard",
             Seq("testBook"),
             1,
@@ -68,7 +68,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
-          DefinedWord(
+          DefinedText(
             "peevish",
             Seq("testBook"),
             1,
@@ -90,7 +90,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
       val bronzeSnapshot = spark.createDataset(
         Seq(
-          CleansedWord(
+          CleansedText(
             "die hard",
             Seq("testBook"),
             2,
@@ -98,7 +98,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             t"1999-01-03T01:01:01Z",
             t"1999-01-04T01:01:01Z"
           ),
-          CleansedWord(
+          CleansedText(
             "diehard",
             Seq("testBook"),
             1,
@@ -106,7 +106,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             t"1999-01-01T01:01:01Z",
             t"1999-01-01T01:01:01Z"
           ),
-          CleansedWord(
+          CleansedText(
             "peevish",
             Seq("testBook", "testBook2"),
             3,
@@ -119,7 +119,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
       val actual = area.upsert(bronzeSnapshot)
       val expected = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "die hard",
             Seq("testBook"),
             2,
@@ -134,7 +134,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq.empty,
             Seq.empty
           ),
-          DefinedWord(
+          DefinedText(
             "die hard",
             Seq("testBook"),
             2,
@@ -149,7 +149,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
-          DefinedWord(
+          DefinedText(
             "diehard",
             Seq("testBook"),
             1,
@@ -164,7 +164,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
-          DefinedWord(
+          DefinedText(
             "peevish",
             Seq("testBook", "testBook2"),
             3,
@@ -189,7 +189,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
       val updates = spark.createDataset(
         Seq(
-          CleansedWord(
+          CleansedText(
             "agsbgf",
             Seq("testBook"),
             2,
@@ -197,7 +197,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             t"1999-01-03T01:01:01Z",
             t"1999-01-04T01:01:01Z"
           ),
-          CleansedWord(
+          CleansedText(
             "diehard",
             Seq("testBook", "testBook2"),
             3,
@@ -210,7 +210,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
       val definedUpdates = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "agsbgf",
             Seq("testBook"),
             2,
@@ -225,7 +225,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             null,
             null,
           ),
-          DefinedWord(
+          DefinedText(
             "diehard",
             Seq("testBook", "testBook2"),
             3,
@@ -245,7 +245,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
       val wordDefinitionApi = mock[WordDefinitionApi]
       (wordDefinitionApi.define _)
-        .expects(new FunctionAdapter1[Dataset[CleansedWord], Boolean](ds => {
+        .expects(new FunctionAdapter1[Dataset[CleansedText], Boolean](ds => {
           assertDataFrameNoOrderEquals(ds.toDF(), updates.toDF())
           true
         }))
@@ -255,7 +255,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
 
       val ingestedBronze = spark.createDataset(
         Seq(
-          CleansedWord(
+          CleansedText(
             "die hard",
             Seq("testBook"),
             1,
@@ -263,7 +263,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             t"1999-01-01T01:01:01Z",
             t"1999-01-01T01:01:01Z",
           ),
-          CleansedWord(
+          CleansedText(
             "peevish",
             Seq("testBook"),
             1,
@@ -275,7 +275,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
       )
       val initialState = spark.createDataset(
         Seq(
-          DefinedWord(
+          DefinedText(
             "die hard",
             Seq("testBook"),
             1,
@@ -290,7 +290,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq.empty,
             Seq.empty
           ),
-          DefinedWord(
+          DefinedText(
             "die hard",
             Seq("testBook"),
             1,
@@ -305,7 +305,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
-          DefinedWord(
+          DefinedText(
             "peevish",
             Seq("testBook"),
             1,
@@ -328,7 +328,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
       val bronzeSnapshot = ingestedBronze.unionByName(updates)
       val actual         = area.upsert(bronzeSnapshot)
       val expected =
-        definedUpdates.withColumn(DefinedWord.UPDATED_AT, lit(testTimestamp)).unionByName(initialState.toDF())
+        definedUpdates.withColumn(DefinedText.UPDATED_AT, lit(testTimestamp)).unionByName(initialState.toDF())
       assertDataFrameDataEquals(expected, actual.toDF())
     }
   }

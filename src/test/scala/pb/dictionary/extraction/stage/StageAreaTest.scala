@@ -54,7 +54,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
           val actual = area.upsert(highlights)
           val expected = spark.createDataset(
             Seq(
-              HighlightedSentence(
+              HighlightedText(
                 7832L,
                 "yacht.\"",
                 "The Great Gatsby",
@@ -62,7 +62,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
                 2L,
                 testTimestamp
               ),
-              HighlightedSentence(
+              HighlightedText(
                 8920L,
                 "coroner",
                 "The Great Gatsby",
@@ -70,7 +70,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
                 3L,
                 testTimestamp
               ),
-              HighlightedSentence(
+              HighlightedText(
                 19475L,
                 "prickle",
                 "Harry Potter and the Sorcerer's Stone",
@@ -146,7 +146,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
           val actual = area.upsert(highlights)
           val expected = spark.createDataset(
             Seq(
-              HighlightedSentence(
+              HighlightedText(
                 19475L,
                 "prickle",
                 "Harry Potter and the Sorcerer's Stone",
@@ -154,7 +154,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
                 4L,
                 secondTimestamp
               ),
-              HighlightedSentence(
+              HighlightedText(
                 8920L,
                 "coroner",
                 "The Great Gatsby",
@@ -205,7 +205,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
         val actual = area.upsert(secondUpdate)
         val expected = spark.createDataset(
           Seq(
-            HighlightedSentence(
+            HighlightedText(
               1L,
               "prickle\nprickle",
               "Harry Potter \nand the Sorcerer's Stone",
@@ -213,7 +213,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
               1L,
               firstTimestamp
             ),
-            HighlightedSentence(
+            HighlightedText(
               2L,
               "yacht\nyacht",
               "The \nGreat Gatsby",

@@ -130,26 +130,20 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
 
   override protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest,  i: Int) = {
     import NgramEnricher._
-    val successfulResponse = response.get
-    val statusLine         = successfulResponse.getStatusLine
+    val validResponse = response.get
+    val statusLine         = validResponse.getStatusLine
     statusLine.getStatusCode match {
       case HttpStatus.SC_OK =>
         super.processResponse(response)(request, i)
       case SC_TOO_MANY_REQUESTS =>
-        logger.warn(s"Ngram API limit exceeded on request `${request}`.")
-        pauseRequests(TOO_MANY_REQUESTS_PAUSE_TIME_MS)
-        None
+        pauseRequestsAndRetry(request, TOO_MANY_REQUESTS_PAUSE_TIME_MS)
       case _ =>
-        val body = super.processResponse(response)(request, i).get
-        throw RemoteHttpEnrichmentException(
-          s"Received response with unexpected statusCode for the request `${request}`." +
-            s" Response status line `$statusLine`, body `$body`")
+        throwUnknownStatusCodeException(request, validResponse)
     }
   }
 }
 
 object NgramEnricher {
-  private val SC_TOO_MANY_REQUESTS = 429
   // ngram API allows 30 requests in 1 minutes. Pausing for 1 minute should reset the counter
   private val TOO_MANY_REQUESTS_PAUSE_TIME_MS = 60 * 1000
 }

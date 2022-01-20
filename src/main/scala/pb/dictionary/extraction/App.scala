@@ -5,10 +5,11 @@ import org.apache.spark.sql.SparkSession
 import pb.dictionary.extraction.bronze.BronzeArea
 import pb.dictionary.extraction.device.DeviceHighlights
 import pb.dictionary.extraction.golden.GoldenArea
-import pb.dictionary.extraction.publish.GoogleSheets
+import pb.dictionary.extraction.publish.{GoogleSheets, ManualEnrichmentArea}
 import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
+// TODO: consistently use `word` and `text` meanings e.g. DefinedWord or DefinedText
 object App {
   private val logger = Logger(getClass)
   // APIs worth trying (partially based on https://medium.com/@martin.breuss/finding-a-useful-dictionary-api-52084a01503d)
@@ -60,14 +61,16 @@ object App {
                        bronze: BronzeArea,
                        silverArea: SilverArea,
                        goldenArea: GoldenArea,
+                       manualEnrichmentArea: ManualEnrichmentArea,
                        publisher: Publisher) = {
     deviceHighlights.snapshot
       .transform(df => stageArea.upsert(df))
       .transform(df => bronze.upsert(df))
       .transform(df => silverArea.upsert(df))
-      .transform(df =>
-        // TODO: add manual definition file
-        goldenArea.upsert(df))
+      .transform { df =>
+        manualEnrichmentArea.upsert(df)
+        goldenArea.upsert(df)
+      }
     println("Golden area was built successfully")
     // TODO: type safe?
 //    publisher.publish(goldenArea.snapshot.toDF)

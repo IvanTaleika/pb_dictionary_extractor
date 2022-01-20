@@ -10,12 +10,13 @@ import org.apache.http.util.EntityUtils
 import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
 
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.locks.{ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
+import java.util.concurrent.locks.{ReentrantLock, ReentrantReadWriteLock}
 import scala.util.Try
 
 abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: Option[Double] = None)
     extends Serializable {
+  protected val SC_TOO_MANY_REQUESTS = 429
+
   protected lazy val logger                         = Logger(getClass)
   private lazy val requestPauseLock                 = new ReentrantLock()
   private lazy val requestLock                      = new ReentrantReadWriteLock()
@@ -37,7 +38,7 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
       }
       val response = try {
         logger.info(
-          s"Throttling request `${request}`. Request rate `${rateLimiter.map(r => s"$r per second").getOrElse("unlimited")}`")
+          s"Throttling request `${request}`. Request rate `${rateLimiter.map(r => s"${r.getRate} requests per second").getOrElse("unlimited")}`")
         rateLimiter.foreach(_.acquire())
         logger.info(s"Executing request `${request}`. Attempt `$i`.")
         Try(httpClient.execute(request))
@@ -58,11 +59,23 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
     enrichmentString
   }
 
-  protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest, i: Int) = {
-    Option(EntityUtils.toString(response.get.getEntity, StandardCharsets.UTF_8))
+  protected def consumeResponse(response: CloseableHttpResponse) = {
+    EntityUtils.toString(response.getEntity, StandardCharsets.UTF_8)
   }
 
-  protected def pauseRequests(pauseTimeMs: Int): Unit = {
+  protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest, i: Int) = {
+    Option(consumeResponse(response.get))
+  }
+
+  protected def throwUnknownStatusCodeException(request: HttpUriRequest, response: CloseableHttpResponse): Nothing = {
+    val statusLine = response.getStatusLine
+    val body       = consumeResponse(response)
+    throw RemoteHttpEnrichmentException(
+      s"Received response with unexpected statusCode for the request `${request}`." +
+        s" Response status line `$statusLine`, body `$body`")
+  }
+
+  protected def pauseRequests(pauseTimeMs: Long): Unit = {
     if (requestPauseLock.tryLock()) {
       requestLock.writeLock().lock()
       logger.warn(s"Pausing requests execution for ${pauseTimeMs} ms.")
@@ -75,6 +88,12 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
     } else {
       logger.warn(s"Requests are already paused by another thread.")
     }
+  }
+
+  protected def pauseRequestsAndRetry(request: HttpUriRequest, pauseTimeMs: Long) = {
+    logger.warn(s"API limit exceeded on request `${request}`.")
+    pauseRequests(pauseTimeMs)
+    Option.empty[String]
   }
 
 }

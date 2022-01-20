@@ -2,7 +2,7 @@ package pb.dictionary.extraction.stage
 
 import java.sql.Timestamp
 
-case class HighlightedSentence(
+case class HighlightedText(
     oid: Long,
     text: String,
     title: String,
@@ -11,7 +11,7 @@ case class HighlightedSentence(
     updatedAt: Timestamp
 )
 
-object HighlightedSentence {
+object HighlightedText {
   val OID      = "oid"
   val TEXT     = "text"
   val TITLE    = "title"

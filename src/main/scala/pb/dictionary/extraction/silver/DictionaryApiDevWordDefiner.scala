@@ -1,28 +1,32 @@
 package pb.dictionary.extraction.silver
+import grizzled.slf4j.Logger
 import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet, HttpUriRequest}
+import org.apache.http.HttpStatus
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField}
 import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher, RemoteHttpEnrichmentException}
-import pb.dictionary.extraction.bronze.CleansedWord
+import pb.dictionary.extraction.bronze.CleansedText
+import pb.dictionary.extraction.golden.NgramEnricher.TOO_MANY_REQUESTS_PAUSE_TIME_MS
 import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner._
 
 import java.net.URLEncoder
 import java.time.{LocalTime, OffsetTime, ZoneId}
+import javax.net.ssl.SSLHandshakeException
 import scala.util.Try
 
 class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDevDfEnricher) extends WordDefinitionApi {
   private val rawDefinitionCol = "rawDefinition"
 
-  def define(df: Dataset[CleansedWord]): Dataset[DefinedWord] = {
+  def define(df: Dataset[CleansedText]): Dataset[DefinedText] = {
     val spark = SparkSession.active
     import spark.implicits._
     val rawDefinitionEncoder =
       RowEncoder.apply(df.schema.add(StructField(rawDefinitionCol, StringType, nullable = true)))
     val definedDf   = dfEnricher.enrich(df, rawDefinitionEncoder)
     val formattedDf = parseDefinitionJson(definedDf)
-    formattedDf.as[DefinedWord]
+    formattedDf.as[DefinedText]
   }
 
   private def parseDefinitionJson(df: DataFrame) = {
@@ -63,24 +67,18 @@ class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDe
     val thirdLevelExplodedDf = secondLevelExplodedDf
       .select((flatten2Cols ++ lvl3Cols.map(n => col(s"$parsedResponseCol.$n").as(n))): _*)
 
-    val formattedDf = thirdLevelExplodedDf.withColumnRenamed(NormalizedDefinition.WORD, DefinedWord.NORMALIZED_TEXT)
+    val formattedDf = thirdLevelExplodedDf.withColumnRenamed(NormalizedDefinition.WORD, DefinedText.NORMALIZED_TEXT)
     formattedDf
   }
 
 }
 
 object DictionaryApiDevWordDefiner {
-  type DictionaryApiDevDfEnricher = RemoteHttpDfEnricher[CleansedWord, Row]
+  type DictionaryApiDevDfEnricher = RemoteHttpDfEnricher[CleansedText, Row]
   val ApiEndpoint = "https://api.dictionaryapi.dev/api/v2/entries/en"
 
-  def SafeSingleTaskRps: Double = {
-    // rate limit is 450 request per 5 minutes. However, during USA day hours API just fails to keep up with request
-    if (OffsetTime.now(ZoneId.of("America/New_York")).toLocalTime.isAfter(LocalTime.of(8, 0))) {
-      0.49
-    } else {
-      1.49
-    }
-  }
+  // rate limit is 450 request per 5 minutes. However, during USA day hours API just fails to keep up with request
+  val SafeSingleTaskRps: Double = 1.49
 
   def apply(maxConcurrentConnections: Int = 1): DictionaryApiDevWordDefiner = {
     val enricher: Option[Double] => DictionaryApiDevEnricher with DictionaryApiDevParallelHttpEnricher =
@@ -131,12 +129,12 @@ object DictionaryApiDevWordDefiner {
 }
 
 abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(SafeSingleTaskRps))
-    extends RemoteHttpEnricher[CleansedWord, Row](singleTaskRps) {
-  def enrich(cleansedWord: CleansedWord): Row = {
+    extends RemoteHttpEnricher[CleansedText, Row](singleTaskRps) {
+  def enrich(cleansedWord: CleansedText): Row = {
     Row.fromSeq(cleansedWord.productIterator.toSeq :+ requestEnrichment(cleansedWord))
   }
 
-  override protected def buildRequest(record: CleansedWord) = {
+  override protected def buildRequest(record: CleansedText) = {
     val url     = s"$ApiEndpoint/${URLEncoder.encode(record.text, "UTF-8")}"
     val request = new HttpGet(url)
     request
@@ -145,11 +143,25 @@ abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(S
   override protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest, i: Int) = {
     import DictionaryApiDevEnricher._
     response
-      .map(_ => super.processResponse(response)(request, i))
+      .map { validResponse =>
+        validResponse.getStatusLine.getStatusCode match {
+          case HttpStatus.SC_OK => super.processResponse(response)(request, i)
+          case SC_TOO_MANY_REQUESTS =>
+            pauseRequestsAndRetry(request, TOO_MANY_REQUESTS_PAUSE_TIME_MS)
+          case HttpStatus.SC_NOT_FOUND =>
+            // API can return 404 for words with definitions under a heavy load.
+            logger.info(s"Could not enrich request ${request}. No definition found")
+            Option("")
+          case _ =>
+            throwUnknownStatusCodeException(request, validResponse)
+        }
+      }
       .recover {
-        // FIXME: Specialize exception
-        case e: Exception =>
-          logger.error(s"Request `${request}` has failed with exception", e)
+        // API server may fail under heavy load, mostly during day-evening time in the US. In this
+        // case it arbitrary terminate the connection. Recovery time is unknown, but 5 minutes seems
+        // to be enough in most cases
+        case e: SSLHandshakeException =>
+          logger.error(s"Request `${request}` failed with exception", e)
           if (i < MAX_ATTEMPTS) {
             logger.warn(
               s"Pausing requests execution before retrying the request `${request}`. Current attempt was `$i` from `$MAX_ATTEMPTS`")
@@ -173,7 +185,7 @@ object DictionaryApiDevEnricher {
   private val TOO_MANY_REQUESTS_PAUSE_TIME_MS = 5 * 60 * 1000
 }
 
-trait DictionaryApiDevParallelHttpEnricher extends ParallelRemoteHttpEnricher[CleansedWord, Row] {
+trait DictionaryApiDevParallelHttpEnricher extends ParallelRemoteHttpEnricher[CleansedText, Row] {
   override protected def remoteHostConnectTimeout = 2 * 60 * 1000
   override protected def socketResponseTimeout    = 3 * 60 * 1000
   override protected def connectionManagerTimeout = 6 * 60 * 1000
