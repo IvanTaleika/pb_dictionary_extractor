@@ -3,13 +3,12 @@ package pb.dictionary.extraction
 import grizzled.slf4j.Logger
 import org.apache.spark.sql.SparkSession
 import pb.dictionary.extraction.bronze.BronzeArea
-import pb.dictionary.extraction.device.DeviceHighlights
+import pb.dictionary.extraction.device.DeviceHighlightsDb
 import pb.dictionary.extraction.golden.GoldenArea
 import pb.dictionary.extraction.publish.{GoogleSheets, ManualEnrichmentArea}
 import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
-// TODO: consistently use `word` and `text` meanings e.g. DefinedWord or DefinedText
 object App {
   private val logger = Logger(getClass)
   // APIs worth trying (partially based on https://medium.com/@martin.breuss/finding-a-useful-dictionary-api-52084a01503d)
@@ -46,7 +45,7 @@ object App {
       .appName("pb_dictionary_extractor")
       .getOrCreate()
 
-    val deviceHighlights = new DeviceHighlights(SourceDbPath)
+    val deviceHighlights = new DeviceHighlightsDb(SourceDbPath)
     val stageArea        = new StageArea(StageAreaPath)
     val bronzeArea       = new BronzeArea(BronzeAreaPath)
     val silverArea       = new SilverArea(SilverAreaPath, DictionaryApiDevWordDefiner())
@@ -56,13 +55,13 @@ object App {
 //    updateDictionary(deviceHighlights, stageArea, bronzeArea, silverArea, goldenArea, googleSheets)
   }
 
-  def updateDictionary(deviceHighlights: DeviceHighlights,
+  def updateDictionary(deviceHighlights: DeviceHighlightsDb,
                        stageArea: StageArea,
                        bronze: BronzeArea,
                        silverArea: SilverArea,
                        goldenArea: GoldenArea,
                        manualEnrichmentArea: ManualEnrichmentArea,
-                       publisher: Publisher) = {
+                       publisher: GoogleSheets) = {
     deviceHighlights.snapshot
       .transform(df => stageArea.upsert(df))
       .transform(df => bronze.upsert(df))
@@ -71,7 +70,7 @@ object App {
         manualEnrichmentArea.upsert(df)
         goldenArea.upsert(df)
       }
-    println("Golden area was built successfully")
+    logger.info("Golden area was built successfully")
     // TODO: type safe?
 //    publisher.publish(goldenArea.snapshot.toDF)
   }

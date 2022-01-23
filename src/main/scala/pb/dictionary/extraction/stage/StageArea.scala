@@ -2,7 +2,7 @@ package pb.dictionary.extraction.stage
 
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, SaveMode}
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.ApplicationManagedArea
+import pb.dictionary.extraction.{ApplicationManagedArea, CsvSnapshotsArea}
 import pb.dictionary.extraction.device.DeviceHighlight
 
 import java.sql.Timestamp
@@ -11,19 +11,12 @@ import java.time.{ZonedDateTime, ZoneOffset}
 class StageArea(
     path: String,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends ApplicationManagedArea[DeviceHighlight, HighlightedText](path, "csv") {
+) extends CsvSnapshotsArea[DeviceHighlight, HighlightedText](path, timestampProvider) {
   import HighlightedText._
   import spark.implicits._
-  override protected def tableOptions    = Map("multiline" -> "true", "header" -> "true", "mode" -> "FAILFAST")
-  override protected def tablePartitions = Seq(UPDATED_AT)
-
-  override protected def initTable(): Unit = {
-    super.initTable()
-    spark.sql(s"msck repair table ${fullTableName}")
-  }
 
   override def upsert(previousSnapshot: Dataset[DeviceHighlight]): Dataset[HighlightedText] = {
-    previousSnapshot.transform(findUpdates).transform(fromUserHighlights).transform(writeNew)
+    previousSnapshot.transform(findUpdates).transform(fromUserHighlights).transform(writeSnapshot)
   }
 
   override protected def findUpdates(previousSnapshot: Dataset[DeviceHighlight]) = {
@@ -32,33 +25,19 @@ class StageArea(
   }
 
   private def fromUserHighlights(userHighlights: Dataset[DeviceHighlight]) = {
+    import DeviceHighlight._
     val parsedValueCol = "parsedValue"
     userHighlights
-      .withColumn(parsedValueCol, from_json(col(DeviceHighlight.VAL), Encoders.product[HighlightInfo].schema))
+      .withColumn(parsedValueCol, from_json(col(VAL), Encoders.product[HighlightInfo].schema))
       // Bookmarks does not have begin/end attributes
       .where(col(parsedValueCol)(HighlightInfo.BEGIN).isNotNull)
       .select(
-        col(DeviceHighlight.OID),
+        col(OID),
         col(parsedValueCol)(HighlightInfo.TEXT) as HighlightedText.TEXT,
-        col(DeviceHighlight.TITLE),
-        col(DeviceHighlight.AUTHORS),
-        col(DeviceHighlight.TIME_EDT)
+        col(TITLE),
+        col(AUTHORS),
+        col(TIME_EDT)
       )
-  }
-
-  private def writeNew(wordHighlights: DataFrame): Dataset[HighlightedText] = {
-    val updateTimestamp = timestampProvider()
-
-    wordHighlights
-      .withColumn(UPDATED_AT, lit(updateTimestamp))
-      .write
-      .partitionBy(tablePartitions: _*)
-      .mode(SaveMode.Append)
-      .format("csv")
-      .saveAsTable(fullTableName)
-    spark.sql(s"msck repair table ${fullTableName}")
-    logger.info(s"Table `${fullTableName}` is updated successfully.")
-    snapshot
   }
 
   private def latestOid: Long =

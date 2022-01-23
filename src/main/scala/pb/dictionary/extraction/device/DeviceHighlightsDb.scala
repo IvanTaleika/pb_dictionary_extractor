@@ -3,7 +3,7 @@ package pb.dictionary.extraction.device
 import org.apache.spark.sql.Dataset
 import pb.dictionary.extraction.Area
 
-class DeviceHighlights(val path: String) extends Area[DeviceHighlight] {
+class DeviceHighlightsDb(val path: String) extends Area[DeviceHighlight] {
   private val HighlightTagId = 104
   import DeviceHighlight._
 

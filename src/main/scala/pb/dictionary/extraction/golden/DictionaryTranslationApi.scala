@@ -9,6 +9,7 @@ trait DictionaryTranslationApi {
   def translate(df: DataFrame): DataFrame
 }
 
+// TODO: implement
 class DummyDictionaryTranslator extends DictionaryTranslationApi {
   import DictionaryRecord._
   override def translate(df: DataFrame): DataFrame =

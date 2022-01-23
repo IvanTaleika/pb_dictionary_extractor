@@ -1,12 +1,14 @@
 package pb.dictionary.extraction.publish
 
+import java.sql.Timestamp
+
 case class UndefinedText(
     text: String,
     books: String,
     occurrences: Int,
     firstOccurrence: String,
     latestOccurrence: String,
-    updatedAt: String
+    updatedAt: Timestamp
 )
 
 object UndefinedText {

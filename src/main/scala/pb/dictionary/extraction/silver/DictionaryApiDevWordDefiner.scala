@@ -1,5 +1,4 @@
 package pb.dictionary.extraction.silver
-import grizzled.slf4j.Logger
 import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet, HttpUriRequest}
 import org.apache.http.HttpStatus
 import org.apache.spark.sql._
@@ -8,11 +7,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField}
 import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher, RemoteHttpEnrichmentException}
 import pb.dictionary.extraction.bronze.CleansedText
-import pb.dictionary.extraction.golden.NgramEnricher.TOO_MANY_REQUESTS_PAUSE_TIME_MS
 import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner._
 
 import java.net.URLEncoder
-import java.time.{LocalTime, OffsetTime, ZoneId}
 import javax.net.ssl.SSLHandshakeException
 import scala.util.Try
 

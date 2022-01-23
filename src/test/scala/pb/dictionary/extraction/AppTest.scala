@@ -5,7 +5,7 @@ import grizzled.slf4j.Logger
 import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.functions.lit
 import pb.dictionary.extraction.bronze.{BronzeArea, CleansedText}
-import pb.dictionary.extraction.device.{DeviceHighlight, DeviceHighlights}
+import pb.dictionary.extraction.device.{DeviceHighlight, DeviceHighlightsDb}
 import pb.dictionary.extraction.golden._
 import pb.dictionary.extraction.publish.{GoogleSheets, ManualEnrichmentArea}
 import pb.dictionary.extraction.silver.{
@@ -43,7 +43,7 @@ class AppTest extends TestBase {
       val googleSheetsPublishPath = s"$testDir/publish"
       val sampleFile              = this.getClass.getResource("deviceHighlightsSample.csv").getPath
 
-      val deviceHighlights      = stub[DeviceHighlights]
+      val deviceHighlights      = stub[DeviceHighlightsDb]
       val deviceHighlightSchema = Encoders.product[DeviceHighlight].schema
 
       val stageArea  = new StageArea(stageAreaPath)
@@ -56,7 +56,7 @@ class AppTest extends TestBase {
 
       val deviceHighlightsSample = spark.read
         .format("csv")
-        .options(CsvFilesOptions.ReadCsvOptions)
+        .options( Map("enforceSchema" -> "false", "mode" -> "FAILFAST", "multiline" -> "true", "header" -> "true"))
         .schema(deviceHighlightSchema)
         .load(sampleFile)
         .orderBy(DeviceHighlight.OID)
