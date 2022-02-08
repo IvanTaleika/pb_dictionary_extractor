@@ -18,8 +18,10 @@ class SilverArea(
   import spark.implicits._
 
   override def upsert(previousSnapshot: Dataset[CleansedText]): Dataset[DefinedText] = {
-    val (oldDefinitions, newDefinitions) = findUndefined(previousSnapshot.transform(findUpdates))
-    newDefinitions.transform(definitionApi.define).transform(updateArea(oldDefinitions))
+    val (existingDefinitions, newEntries) = findUndefined(previousSnapshot.transform(findUpdates))
+    val newDefinitions                    = definitionApi.define(newEntries)
+    val allUpdates                        = buildUpdateDf(existingDefinitions, newDefinitions)
+    updateArea(allUpdates)
   }
 
   // TODO: retry definition search for old words without definitions?
@@ -36,26 +38,32 @@ class SilverArea(
     (oldDefinitions, newDefinitions)
   }
 
-  private def updateArea(oldDefinitions: Dataset[CleansedText])(
-      newDefinitions: Dataset[DefinedText]): Dataset[DefinedText] = {
+  private def buildUpdateDf(existingEntries: Dataset[CleansedText], newDefinitions: DataFrame): Dataset[DefinedText] = {
     val currentTimestamp = timestampProvider()
 
-    val metadataUpdate = UPDATED_AT -> lit(currentTimestamp)
+    val dummyOldDefinitions = existingEntries
+      .select(
+        (
+          Seq(lit(currentTimestamp) as UPDATED_AT) ++
+            pkCols ++
+            propagatingAttributesCols ++
+            enrichedAttributesFields.map(f => lit(null) cast f.dataType as f.name)
+        ): _*)
+      .as[DefinedText]
+    val finishedNewDefinitions = newDefinitions.withColumn(UPDATED_AT, lit(currentTimestamp)).as[DefinedText]
 
-    // TODO: refactor to a single merge to make the operation atomic
+    dummyOldDefinitions.unionByName(finishedNewDefinitions)
+  }
+
+  private def updateArea(updates: Dataset[DefinedText]): Dataset[DefinedText] = {
     deltaTable
       .as(tableName)
-      .merge(oldDefinitions.toDF().as(stagingAlias), colDelta(TEXT) === colStaged(TEXT))
+      .merge(updates.toDF().as(stagingAlias), colDelta(TEXT) === colStaged(TEXT))
       .whenMatched()
-      .update(bronzePropagatingCols.map(c => c -> colStaged(c)).toMap + metadataUpdate)
+      .update((propagatingAttributes :+ UPDATED_AT).map(c => c -> colStaged(c)).toMap)
+      .whenNotMatched()
+      .insertAll()
       .execute()
-
-    newDefinitions
-      .withColumn(UPDATED_AT, lit(currentTimestamp))
-      .write
-      .format("delta")
-      .mode(SaveMode.Append)
-      .save(absoluteTablePath)
 
     logger.info(s"Table `${fullTableName}` is updated successfully.")
 

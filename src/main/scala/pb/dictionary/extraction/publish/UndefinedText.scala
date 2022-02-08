@@ -1,5 +1,7 @@
 package pb.dictionary.extraction.publish
 
+import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion}
+
 import java.sql.Timestamp
 
 case class UndefinedText(
@@ -9,13 +11,18 @@ case class UndefinedText(
     firstOccurrence: String,
     latestOccurrence: String,
     updatedAt: Timestamp
-)
+) extends ApplicationManagedProduct
 
-object UndefinedText {
-  val TEXT              = "text"
-  val BOOKS             = "books"
-  val OCCURRENCES       = "occurrences"
-  val FIRST_OCCURRENCE  = "firstOccurrence"
-  val LATEST_OCCURRENCE = "latestOccurrence"
-  val UPDATED_AT        = "updatedAt"
+object UndefinedText extends ApplicationManagedProductCompanion[ApplicationManagedProduct] {
+  val TEXT            = "text"
+  val pk: Seq[String] = Seq(TEXT)
+
+  val OCCURRENCES                        = "occurrences"
+  val propagatingAttributes: Seq[String] = Seq(OCCURRENCES)
+
+  val BOOKS                           = "books"
+  val FIRST_OCCURRENCE                = "firstOccurrence"
+  val LATEST_OCCURRENCE               = "latestOccurrence"
+  val enrichedAttributes: Seq[String] = Seq(BOOKS, FIRST_OCCURRENCE, LATEST_OCCURRENCE)
+
 }

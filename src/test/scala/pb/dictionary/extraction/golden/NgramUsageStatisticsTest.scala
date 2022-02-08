@@ -6,9 +6,10 @@ import org.apache.http.entity.{ContentType, StringEntity}
 import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.message.BasicStatusLine
 import org.apache.spark.sql.Row
+import org.apache.spark.SparkException
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.invocation.InvocationOnMock
-import pb.dictionary.extraction.TestBase
+import pb.dictionary.extraction.{RemoteHttpEnrichmentException, TestBase}
 import pb.dictionary.extraction.golden.NgramUsageStatistics.NgramDfEnricher
 
 class NgramUsageStatisticsTest extends TestBase {
@@ -117,6 +118,10 @@ class NgramUsageStatisticsTest extends TestBase {
         )
         assertDataFrameDataEquals(actual, expected)
       }
+    }
+
+    describe("Should abort data enrichment, throwing an exception") {
+
       it("when API response with error code") {
         val df = createDataFrame(
           sourceSchema,
@@ -132,13 +137,8 @@ class NgramUsageStatisticsTest extends TestBase {
         )
 
         val ngramClient = new NgramUsageStatistics(new NgramDfEnricher(testClient))
-        val actual      = ngramClient.findUsageFrequency(df)
-        val expected = createDataFrame(
-          finalSchema,
-          Row("duck", "noun", 1, null),
-          Row("duck", "verb", 2, null)
-        )
-        assertDataFrameApproximateEquals(actual.orderBy(OCCURRENCES), expected, 0.001)
+        val actual = the[SparkException] thrownBy (ngramClient.findUsageFrequency(df).collect())
+        actual.getCause shouldBe a [RemoteHttpEnrichmentException]
       }
     }
 

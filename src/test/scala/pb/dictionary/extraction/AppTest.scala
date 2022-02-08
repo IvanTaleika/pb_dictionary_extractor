@@ -76,7 +76,7 @@ class AppTest extends TestBase {
         manualEnrichmentArea,
         publish
       )
-      Thread.sleep(1000000)
+//      Thread.sleep(1000000)
     }
   }
 }

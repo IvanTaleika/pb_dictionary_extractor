@@ -1,5 +1,7 @@
 package pb.dictionary.extraction.golden
 
+import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion}
+
 import java.sql.Timestamp
 
 case class DictionaryRecord(
@@ -12,17 +14,20 @@ case class DictionaryRecord(
     firstOccurrence: Timestamp,
     latestOccurrence: Timestamp,
     definition: String,
-    example: String,
+    examples: Seq[String],
     synonyms: Seq[String],
     antonyms: Seq[String],
     translation: String,
     usage: Option[Double],
     updatedAt: Timestamp,
-)
+) extends ApplicationManagedProduct
 
-object DictionaryRecord {
+object DictionaryRecord extends ApplicationManagedProductCompanion[DictionaryRecord] {
   // silver
-  val NORMALIZED_TEXT   = "normalizedText"
+  val NORMALIZED_TEXT = "normalizedText"
+  val DEFINITION      = "definition"
+  val pk              = Seq(NORMALIZED_TEXT, DEFINITION)
+
   val PART_OF_SPEECH    = "partOfSpeech"
   val PHONETIC          = "phonetic"
   val FORMS             = "forms"
@@ -30,24 +35,10 @@ object DictionaryRecord {
   val OCCURRENCES       = "occurrences"
   val FIRST_OCCURRENCE  = "firstOccurrence"
   val LATEST_OCCURRENCE = "latestOccurrence"
-  val DEFINITION        = "definition"
-  val EXAMPLE           = "example"
+  val EXAMPLES          = "examples"
   val SYNONYMS          = "synonyms"
   val ANTONYMS          = "antonyms"
-  // new information
-  val TRANSLATION = "translation"
-  val USAGE       = "usage"
-
-  // metadata
-  val UPDATED_AT = "updatedAt"
-
-  // TODO: Consider create a trait for PK, propagating attributes and enriched attributes
-  val pk = Seq(
-    NORMALIZED_TEXT,
-    DEFINITION
-  )
-
-  val silverPropagatingCols = Seq(
+  val propagatingAttributes: Seq[String] = Seq(
     FORMS,
     BOOKS,
     OCCURRENCES,
@@ -58,11 +49,11 @@ object DictionaryRecord {
     PART_OF_SPEECH,
     SYNONYMS,
     ANTONYMS,
-    EXAMPLE,
+    EXAMPLES,
   )
 
-  val enrichedAttributes = Seq(
-    TRANSLATION,
-    USAGE
-  )
+  val TRANSLATION        = "translation"
+  val USAGE              = "usage"
+  val enrichedAttributes = Seq(TRANSLATION, USAGE)
+
 }

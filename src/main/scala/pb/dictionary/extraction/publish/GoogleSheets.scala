@@ -59,9 +59,9 @@ class GoogleSheets(
         coalesce(colPublished(FIRST_OCCURRENCE), timestampToCsvString(colGolden(FIRST_OCCURRENCE))) as FIRST_OCCURRENCE,
         coalesce(colPublished(LATEST_OCCURRENCE), timestampToCsvString(colGolden(LATEST_OCCURRENCE))) as LATEST_OCCURRENCE,
         coalesce(colPublished(DEFINITION), colGolden(DEFINITION)) as DEFINITION,
-        coalesce(colPublished(EXAMPLES), colGolden(EXAMPLE)) as EXAMPLES,
-        coalesce(colPublished(SYNONYMS), colGolden(SYNONYMS)) as SYNONYMS,
-        coalesce(colPublished(ANTONYMS), colGolden(ANTONYMS)) as ANTONYMS,
+        coalesce(colPublished(EXAMPLES), array_join(colGolden(EXAMPLES), ",")) as EXAMPLES,
+        coalesce(colPublished(SYNONYMS), array_join(colGolden(SYNONYMS), ",")) as SYNONYMS,
+        coalesce(colPublished(ANTONYMS), array_join(colGolden(ANTONYMS), ",")) as ANTONYMS,
         coalesce(colPublished(TRANSLATION), colGolden(TRANSLATION)) as TRANSLATION,
         coalesce(colPublished(USAGE), concat(format_number(colGolden(USAGE) * 100, usageDecimals), lit("%"))) as USAGE,
       )

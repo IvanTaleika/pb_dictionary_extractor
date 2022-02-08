@@ -1,11 +1,12 @@
 package pb.dictionary.extraction.publish
 
+import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion}
+
 import java.sql.Timestamp
 
 case class SheetRow(
     id: Int,
-    // TODO: enum? Values - new / in progress / learned
-    status: String,
+    status: String, // new / in progress / learned
     normalizedText: String,
     partOfSpeech: String,
     phonetic: String,
@@ -22,24 +23,35 @@ case class SheetRow(
     usage: String,
     // CSV does not support timestamp - this is a partition column
     updatedAt: Timestamp,
-)
+) extends ApplicationManagedProduct
 
-object SheetRow {
-  val ID                = "id"
+object SheetRow extends ApplicationManagedProductCompanion[SheetRow] {
+  val ID              = "id"
+  val pk: Seq[String] = Seq(ID)
+
+  val NORMALIZED_TEXT = "normalizedText"
+  val PART_OF_SPEECH  = "partOfSpeech"
+  val PHONETIC        = "phonetic"
+  val FORMS           = "forms"
+  val OCCURRENCES     = "occurrences"
+  val DEFINITION      = "definition"
+  val TRANSLATION     = "translation"
+  val propagatingAttributes: Seq[String] =
+    Seq(NORMALIZED_TEXT, PART_OF_SPEECH, PHONETIC, FORMS, OCCURRENCES, DEFINITION, TRANSLATION)
+
   val STATUS            = "status"
-  val NORMALIZED_TEXT   = "normalizedText"
-  val PART_OF_SPEECH    = "partOfSpeech"
-  val PHONETIC          = "phonetic"
-  val FORMS             = "forms"
   val SOURCE            = "source"
-  val OCCURRENCES       = "occurrences"
   val FIRST_OCCURRENCE  = "firstOccurrence"
   val LATEST_OCCURRENCE = "latestOccurrence"
-  val DEFINITION        = "definition"
   val EXAMPLES          = "examples"
   val SYNONYMS          = "synonyms"
   val ANTONYMS          = "antonyms"
-  val TRANSLATION       = "translation"
   val USAGE             = "usage"
-  val UPDATED_AT        = "updatedAt"
+  val enrichedAttributes: Seq[String] =
+    Seq(STATUS, SOURCE, FIRST_OCCURRENCE, LATEST_OCCURRENCE, EXAMPLES, SYNONYMS, ANTONYMS, USAGE)
+
+  val NewStatus        = "new"
+  val InProgressStatus = "in progress"
+  val LearnedStatus    = "learned"
+
 }

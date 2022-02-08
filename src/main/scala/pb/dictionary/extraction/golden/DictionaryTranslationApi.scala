@@ -5,7 +5,6 @@ import org.apache.spark.sql.functions._
 
 trait DictionaryTranslationApi {
 
-  // TODO: typesafe?
   def translate(df: DataFrame): DataFrame
 }
 

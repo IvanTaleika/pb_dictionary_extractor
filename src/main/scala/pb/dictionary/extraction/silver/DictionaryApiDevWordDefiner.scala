@@ -5,7 +5,12 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField}
-import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher, RemoteHttpEnrichmentException}
+import pb.dictionary.extraction.{
+  ParallelRemoteHttpEnricher,
+  RemoteHttpDfEnricher,
+  RemoteHttpEnricher,
+  RemoteHttpEnrichmentException
+}
 import pb.dictionary.extraction.bronze.CleansedText
 import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner._
 
@@ -16,14 +21,14 @@ import scala.util.Try
 class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDevDfEnricher) extends WordDefinitionApi {
   private val rawDefinitionCol = "rawDefinition"
 
-  def define(df: Dataset[CleansedText]): Dataset[DefinedText] = {
+  def define(df: Dataset[CleansedText]): DataFrame = {
     val spark = SparkSession.active
     import spark.implicits._
     val rawDefinitionEncoder =
       RowEncoder.apply(df.schema.add(StructField(rawDefinitionCol, StringType, nullable = true)))
     val definedDf   = dfEnricher.enrich(df, rawDefinitionEncoder)
     val formattedDf = parseDefinitionJson(definedDf)
-    formattedDf.as[DefinedText]
+    formattedDf
   }
 
   private def parseDefinitionJson(df: DataFrame) = {
@@ -64,7 +69,12 @@ class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDe
     val thirdLevelExplodedDf = secondLevelExplodedDf
       .select((flatten2Cols ++ lvl3Cols.map(n => col(s"$parsedResponseCol.$n").as(n))): _*)
 
-    val formattedDf = thirdLevelExplodedDf.withColumnRenamed(NormalizedDefinition.WORD, DefinedText.NORMALIZED_TEXT)
+    val formattedDf = thirdLevelExplodedDf
+      .withColumnRenamed(NormalizedDefinition.WORD, DefinedText.NORMALIZED_TEXT)
+      .withColumn(DefinedText.EXAMPLES,
+                  when(col(Definition.EXAMPLE).isNotNull, array(col(Definition.EXAMPLE)))
+                    .otherwise(lit(Array.empty[String]))) // API provides a single example only
+      .drop(Definition.EXAMPLE)
     formattedDf
   }
 

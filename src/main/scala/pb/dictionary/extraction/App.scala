@@ -71,7 +71,7 @@ object App {
         goldenArea.upsert(df)
       }
     logger.info("Golden area was built successfully")
-    // TODO: type safe?
+    // TODO: type safe
 //    publisher.publish(goldenArea.snapshot.toDF)
   }
 //  SparkSession.active.table("updateDictionary.silver").orderBy(org.apache.spark.sql.functions.col("occurrences").desc).show(false)

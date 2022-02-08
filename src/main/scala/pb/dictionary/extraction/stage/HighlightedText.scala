@@ -1,5 +1,7 @@
 package pb.dictionary.extraction.stage
 
+import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion}
+
 import java.sql.Timestamp
 
 case class HighlightedText(
@@ -9,13 +11,18 @@ case class HighlightedText(
     authors: String,
     timeEdt: Long,
     updatedAt: Timestamp
-)
+) extends ApplicationManagedProduct
 
-object HighlightedText {
-  val OID      = "oid"
-  val TEXT     = "text"
-  val TITLE    = "title"
-  val AUTHORS  = "authors"
-  val TIME_EDT = "timeEdt"
-  val UPDATED_AT = "updatedAt"
+object HighlightedText extends ApplicationManagedProductCompanion[HighlightedText] {
+  val OID             = "oid"
+  val pk: Seq[String] = Seq(OID)
+
+  val TEXT                            = "text"
+  val enrichedAttributes: Seq[String] = Seq(TEXT)
+
+  val TITLE                              = "title"
+  val AUTHORS                            = "authors"
+  val TIME_EDT                           = "timeEdt"
+  val propagatingAttributes: Seq[String] = Seq(TITLE, AUTHORS, TIME_EDT)
+
 }

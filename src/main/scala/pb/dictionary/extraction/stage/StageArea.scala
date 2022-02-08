@@ -2,7 +2,7 @@ package pb.dictionary.extraction.stage
 
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, SaveMode}
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.{ApplicationManagedArea, CsvSnapshotsArea}
+import pb.dictionary.extraction.{ApplicationManagedArea, CsvArea, CsvSnapshotsArea}
 import pb.dictionary.extraction.device.DeviceHighlight
 
 import java.sql.Timestamp
@@ -11,7 +11,7 @@ import java.time.{ZonedDateTime, ZoneOffset}
 class StageArea(
     path: String,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends CsvSnapshotsArea[DeviceHighlight, HighlightedText](path, timestampProvider) {
+) extends CsvArea[DeviceHighlight, HighlightedText](path, timestampProvider) {
   import HighlightedText._
   import spark.implicits._
 

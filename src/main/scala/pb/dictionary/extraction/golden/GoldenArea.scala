@@ -17,10 +17,10 @@ class GoldenArea(
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
 ) extends DeltaArea[DefinedText, DictionaryRecord](path) {
   import DictionaryRecord._
+  import spark.implicits._
 
   private def pkMatches(t1: String, t2: String) =
     pk.map(cn => colFromTable(t1)(cn) === colFromTable(t2)(cn)).reduce(_ && _)
-  private val deltaPkMatches = pkMatches(tableName, stagingAlias)
 
   override def upsert(silverSnapshot: Dataset[DefinedText]): Dataset[DictionaryRecord] = {
     import spark.implicits._
@@ -33,12 +33,13 @@ class GoldenArea(
             .join(definedUpdates.as("definedUpdates"), pkMatches("silverSnapshot", "definedUpdates"), "left_semi")
       )
       .as[DefinedText]
-    val groupedDefinitions = fromSilver(updatedDefinitions)
-    val (oldDefinitions, newDefinitions) = findNew(groupedDefinitions)
-    val newDictionaryRecords = newDefinitions
+    val groupedDefinitions           = fromSilver(updatedDefinitions)
+    val (updatedEntries, newEntries) = findNew(groupedDefinitions)
+    val newDictionaryRecords = newEntries
       .transform(df => dictionaryTranslationApi.translate(df))
       .transform(df => usageFrequencyApi.findUsageFrequency(df))
-    updateArea(oldDefinitions)(newDictionaryRecords)
+    val allUpdates = buildUpdateDf(updatedEntries, newDictionaryRecords)
+    updateArea(allUpdates)
   }
 
   private def findNew(groupedDefinitions: DataFrame) = {
@@ -54,7 +55,7 @@ class GoldenArea(
   private[golden] def fromSilver(updatedDefinitions: Dataset[DefinedText]): DataFrame = {
     val pkCols               = pk.map(col)
     val updateTimeWindow     = Window.partitionBy(pkCols: _*).orderBy(col(DefinedText.UPDATED_AT).desc_nulls_last)
-    val definitionAttributes = Seq(SYNONYMS, ANTONYMS, PHONETIC, PART_OF_SPEECH, EXAMPLE)
+    val definitionAttributes = Seq(SYNONYMS, ANTONYMS, PHONETIC, PART_OF_SPEECH, EXAMPLES)
     val latestDefinitionAttributes = definitionAttributes
       .foldLeft(updatedDefinitions.toDF)((df, cn) => df.withColumn(cn, first(cn).over(updateTimeWindow)))
     val newGoldenRecords = latestDefinitionAttributes
@@ -70,26 +71,34 @@ class GoldenArea(
     newGoldenRecords
   }
 
-  private[golden] def updateArea(oldDefinitions: DataFrame)(newDefinitions: DataFrame): Dataset[DictionaryRecord] = {
+  private def buildUpdateDf(existingEntries: DataFrame, newDefinitions: DataFrame): Dataset[DictionaryRecord] = {
     val currentTimestamp = timestampProvider()
 
-    val metadataUpdate = UPDATED_AT -> lit(currentTimestamp)
+    val dummyOldDefinitions = existingEntries
+      .select(
+        (
+          Seq(lit(currentTimestamp) as UPDATED_AT) ++
+            pkCols ++
+            propagatingAttributesCols ++
+            enrichedAttributesFields.map(f => lit(null) cast f.dataType as f.name)
+        ): _*)
+      .as[DictionaryRecord]
+    val finishedNewDefinitions = newDefinitions.withColumn(UPDATED_AT, lit(currentTimestamp)).as[DictionaryRecord]
 
+    dummyOldDefinitions.unionByName(finishedNewDefinitions)
+  }
+
+  private[golden] def updateArea(updates: Dataset[DictionaryRecord]): Dataset[DictionaryRecord] = {
     deltaTable
       .as(tableName)
-      .merge(oldDefinitions.as(stagingAlias), deltaPkMatches)
+      .merge(updates.toDF().as(stagingAlias), pkMatches(tableName, stagingAlias))
       .whenMatched()
-      .update(silverPropagatingCols.map(c => c -> colStaged(c)).toMap + metadataUpdate)
+      .update((propagatingAttributes :+ UPDATED_AT).map(c => c -> colStaged(c)).toMap)
+      .whenNotMatched()
+      .insertAll()
       .execute()
 
-    newDefinitions
-      .withColumn(UPDATED_AT, lit(currentTimestamp))
-      .write
-      .format("delta")
-      .mode(SaveMode.Append)
-      .save(absoluteTablePath)
     logger.info(s"Table `${fullTableName}` is updated successfully.")
-
     snapshot
   }
 }

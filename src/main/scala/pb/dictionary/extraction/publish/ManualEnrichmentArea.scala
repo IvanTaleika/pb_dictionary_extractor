@@ -1,9 +1,9 @@
 package pb.dictionary.extraction.publish
 
-import org.apache.spark.sql.{Column, DataFrame, Dataset, SaveMode}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import pb.dictionary.extraction.silver.DefinedText
-import pb.dictionary.extraction.{ApplicationManagedArea, CsvSnapshotsArea}
+import pb.dictionary.extraction.CsvSnapshotsArea
 
 import java.sql.Timestamp
 import java.time.{ZonedDateTime, ZoneOffset}

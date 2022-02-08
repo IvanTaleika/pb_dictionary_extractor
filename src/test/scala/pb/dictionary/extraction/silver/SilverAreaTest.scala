@@ -7,6 +7,7 @@ import pb.dictionary.extraction.ApplicationManagedAreaTestBase
 import pb.dictionary.extraction.bronze.CleansedText
 
 class SilverAreaTest extends ApplicationManagedAreaTestBase {
+  import DefinedText._
 
   override val areaName: String = "silver"
 
@@ -17,7 +18,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
       val wordDefinitionApi = mock[WordDefinitionApi]
       (wordDefinitionApi.define _)
         .expects(new FunctionAdapter1[Dataset[CleansedText], Boolean](ds => ds.isEmpty))
-        .returns(spark.emptyDataset)
+        .returns(spark.emptyDataset[DefinedText].drop(UPDATED_AT))
         .once()
       val area = new SilverArea(areaPath, wordDefinitionApi, testTimestampProvider)
 
@@ -34,7 +35,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             null,
             null,
             "disappear or change very slowly.",
-            "old habits die hard",
+            Seq("old habits die hard"),
             Seq.empty,
             Seq.empty
           ),
@@ -49,7 +50,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             "ˈdʌɪhɑːd",
             "noun",
             "a person who strongly opposes change or who continues to support something in spite of opposition.",
-            "a diehard Yankees fan",
+            Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
@@ -64,7 +65,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             "ˈdʌɪhɑːd",
             "noun",
             "a person who strongly opposes change or who continues to support something in spite of opposition.",
-            "a diehard Yankees fan",
+            Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
@@ -79,7 +80,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             "ˈpiːvɪʃ",
             "adjective",
             "having or showing an irritable disposition.",
-            "a thin peevish voice",
+            Seq("a thin peevish voice"),
             Seq("irritable", "...", "miffy"),
             Seq("affable", "easy-going")
           )
@@ -130,7 +131,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             null,
             null,
             "disappear or change very slowly.",
-            "old habits die hard",
+            Seq("old habits die hard"),
             Seq.empty,
             Seq.empty
           ),
@@ -145,7 +146,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             "ˈdʌɪhɑːd",
             "noun",
             "a person who strongly opposes change or who continues to support something in spite of opposition.",
-            "a diehard Yankees fan",
+            Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
@@ -160,7 +161,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             "ˈdʌɪhɑːd",
             "noun",
             "a person who strongly opposes change or who continues to support something in spite of opposition.",
-            "a diehard Yankees fan",
+            Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
@@ -175,7 +176,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             "ˈpiːvɪʃ",
             "adjective",
             "having or showing an irritable disposition.",
-            "a thin peevish voice",
+            Seq("a thin peevish voice"),
             Seq("irritable", "...", "miffy"),
             Seq("affable", "easy-going")
           )
@@ -208,40 +209,42 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
         )
       )
 
-      val definedUpdates = spark.createDataset(
-        Seq(
-          DefinedText(
-            "agsbgf",
-            Seq("testBook"),
-            2,
-            t"1999-01-02T01:01:01Z",
-            t"1999-01-03T01:01:01Z",
-            t"1999-01-04T01:01:01Z",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-          ),
-          DefinedText(
-            "diehard",
-            Seq("testBook", "testBook2"),
-            3,
-            t"1998-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
-            t"1999-01-04T01:01:01Z",
-            "diehard",
-            "ˈdʌɪhɑːd",
-            "noun",
-            "a person who strongly opposes change or who continues to support something in spite of opposition.",
-            "a diehard Yankees fan",
-            Seq("hard-line", "...", "blimp"),
-            Seq("modernizer")
+      val definedUpdates = spark
+        .createDataset(
+          Seq(
+            DefinedText(
+              "agsbgf",
+              Seq("testBook"),
+              2,
+              t"1999-01-02T01:01:01Z",
+              t"1999-01-03T01:01:01Z",
+              t"1999-01-04T01:01:01Z",
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+            ),
+            DefinedText(
+              "diehard",
+              Seq("testBook", "testBook2"),
+              3,
+              t"1998-01-01T01:01:01Z",
+              t"1999-01-01T01:01:01Z",
+              t"1999-01-04T01:01:01Z",
+              "diehard",
+              "ˈdʌɪhɑːd",
+              "noun",
+              "a person who strongly opposes change or who continues to support something in spite of opposition.",
+              Seq("a diehard Yankees fan"),
+              Seq("hard-line", "...", "blimp"),
+              Seq("modernizer")
+            )
           )
         )
-      )
+        .drop(UPDATED_AT)
 
       val wordDefinitionApi = mock[WordDefinitionApi]
       (wordDefinitionApi.define _)
@@ -286,7 +289,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             null,
             null,
             "disappear or change very slowly.",
-            "old habits die hard",
+            Seq("old habits die hard"),
             Seq.empty,
             Seq.empty
           ),
@@ -301,7 +304,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             "ˈdʌɪhɑːd",
             "noun",
             "a person who strongly opposes change or who continues to support something in spite of opposition.",
-            "a diehard Yankees fan",
+            Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer")
           ),
@@ -316,7 +319,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             "ˈpiːvɪʃ",
             "adjective",
             "having or showing an irritable disposition.",
-            "a thin peevish voice",
+            Seq("a thin peevish voice"),
             Seq("irritable", "...", "miffy"),
             Seq("affable", "easy-going")
           )

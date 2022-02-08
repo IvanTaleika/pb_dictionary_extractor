@@ -3,9 +3,10 @@ name := "pb_dictionary_extractor"
 version := "0.1"
 
 val scalaMajorVersion = "2.12"
+val scalaMinorVersion = "15"
 val sparkVersion      = "3.2.0"
 
-scalaVersion := s"$scalaMajorVersion.15"
+scalaVersion := s"$scalaMajorVersion.$scalaMinorVersion"
 
 libraryDependencies := Seq(
   "org.apache.spark" %% s"spark-core" % sparkVersion,

@@ -7,8 +7,9 @@ import org.apache.http.client.methods.CloseableHttpResponse
 import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.protocol.HttpContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, StructField, StructType}
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.functions.{array_sort, col}
 import org.mockito.ArgumentMatchers
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSpec, Matchers}
@@ -25,7 +26,7 @@ abstract class TestBase
     with Matchers
     with MockFactory
     with DataFrameSuiteBase {
-  val warehousePath = "target/spark-warehouse"
+  val warehousePath    = "target/spark-warehouse"
   protected val logger = Logger(getClass)
 
   override def conf: SparkConf =
@@ -60,10 +61,31 @@ abstract class TestBase
     def t(args: Any*): Timestamp = Timestamp.from(ZonedDateTime.parse(sc.s(args: _*)).toInstant)
   }
 
+  def assertDataFrameDataInColumnsEqual(expected: DataFrame, actual: DataFrame, sortArrays: Boolean = true) = {
+    val (expectedNormalized, actualNormalized) = if (sortArrays) {
+      val expectedArrayCols  = expected.schema.collect { case StructField(name, _: ArrayType, _, _) => name }
+      val actualArrayCols    = actual.schema.collect { case StructField(name, _: ArrayType, _, _) => name }
+      val sortedArraysActual = actualArrayCols.foldLeft(actual)((df, cn) => df.withColumn(cn, array_sort(col(cn))))
+      val sortedArraysExpected =
+        expectedArrayCols.foldLeft(expected)((df, cn) => df.withColumn(cn, array_sort(col(cn))))
+      (sortedArraysExpected, sortedArraysActual)
+    } else {
+      (expected, actual)
+    }
+
+    val expectedNamesOrder          = expected.schema.map(_.name)
+    val actualSchemaInExpectedOrder = actual.schema.sortBy(f => expectedNamesOrder.indexOf(f.name))
+
+    val actualInExpectedOrder  = actualNormalized.select(actualSchemaInExpectedOrder.map(_.name).map(col): _*)
+    val expectedInInitialOrder = expectedNormalized.select(actualSchemaInExpectedOrder.map(_.name).map(col): _*)
+
+    assertDataFrameDataEquals(expectedInInitialOrder, actualInExpectedOrder)
+  }
+
   def argThatDataEqualsTo[T1, T2](stepName: String, expected: Dataset[T1]) =
     ArgumentMatchers.argThat((actual: Dataset[T2]) => {
       val trackingInfo = stepName
-      assertDataFrameNoOrderEquals(actual.toDF(), expected.toDF())
+      assertDataFrameDataInColumnsEqual(actual.toDF(), expected.toDF())
       true
     })
 }

@@ -6,7 +6,8 @@ import org.apache.http.entity.{ContentType, StringEntity}
 import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.message.BasicStatusLine
 import org.apache.http.protocol.HttpContext
-import pb.dictionary.extraction.TestBase
+import org.apache.spark.SparkException
+import pb.dictionary.extraction.{RemoteHttpEnrichmentException, TestBase}
 import pb.dictionary.extraction.bronze.CleansedText
 import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner.DictionaryApiDevDfEnricher
 
@@ -32,6 +33,20 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
   }
 
   describe("define method") {
+
+    describe("Should abort data enrichment, throwing an exception") {
+
+      it("when API response with unknown error code") {
+        val df = createUndefinedDf("hello")
+        val testClient = new TestDictionaryApiDevEnricher(
+          HttpStatus.SC_SERVICE_UNAVAILABLE,
+          ""
+        )
+        val definer = new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(testClient))
+        val actual = the[SparkException] thrownBy (definer.define(df).collect())
+        actual.getCause shouldBe a [RemoteHttpEnrichmentException]
+      }
+    }
 
     describe("Should populate definition columns with nulls") {
       it("When no definition was found for a text") {
@@ -67,37 +82,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
               null
             )),
         )
-        assertDataFrameNoOrderEquals(actual.toDF, expected.toDF)
-      }
-
-      it("when API response with error code") {
-        import spark.implicits._
-        val df = createUndefinedDf("hello")
-        val testClient = new TestDictionaryApiDevEnricher(
-          HttpStatus.SC_SERVICE_UNAVAILABLE,
-          ""
-        )
-        val definer = new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(testClient))
-        val actual  = definer.define(df)
-        val expected = spark.createDataset(
-          Seq(
-            DefinedText(
-              "hello",
-              Seq("testBook"),
-              1,
-              t"2021-01-01T01:01:01Z",
-              t"2021-01-01T01:01:01Z",
-              t"2021-01-01T01:01:01Z",
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null
-            )),
-        )
-        assertDataFrameNoOrderEquals(actual.toDF, expected.toDF)
+        assertDataFrameDataInColumnsEqual(actual.toDF, expected.toDF)
       }
     }
 
@@ -159,12 +144,12 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
               "ˈpiːvɪʃ",
               "adjective",
               "having or showing an irritable disposition.",
-              "a thin peevish voice",
+              Seq("a thin peevish voice"),
               Seq("irritable", "...", "miffy"),
               Seq("affable", "easy-going")
             ))
         )
-        assertDataFrameNoOrderEquals(actual.toDF, expected.toDF)
+        assertDataFrameDataInColumnsEqual(actual.toDF, expected.toDF)
       }
 
       describe("And create a separate row in the output for each definition") {
@@ -241,7 +226,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 null,
                 null,
                 "disappear or change very slowly.",
-                "old habits die hard",
+                Seq("old habits die hard"),
                 Seq.empty,
                 Seq.empty
               ),
@@ -256,12 +241,12 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 "ˈdʌɪhɑːd",
                 "noun",
                 "a person who strongly opposes change or who continues to support something in spite of opposition.",
-                "a diehard Yankees fan",
+                Seq("a diehard Yankees fan"),
                 Seq("hard-line", "...", "blimp"),
                 Seq("modernizer")
               )
             ))
-          assertDataFrameNoOrderEquals(actual.toDF, expected.toDF)
+          assertDataFrameDataInColumnsEqual(actual.toDF, expected.toDF)
         }
 
         it("when text has multiple meanings") {
@@ -323,7 +308,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 "dʌk",
                 "noun",
                 "a waterbird with a broad blunt bill, short legs, webbed feet, and a waddling gait.",
-                null,
+                Seq.empty,
                 Seq.empty,
                 Seq.empty
               ),
@@ -338,7 +323,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 "dʌk",
                 "noun",
                 "a pure white thin-shelled bivalve mollusc found off the Atlantic coasts of America.",
-                null,
+                Seq.empty,
                 Seq.empty,
                 Seq.empty
               ),
@@ -353,12 +338,12 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 "dʌk",
                 "noun",
                 "an amphibious transport vehicle.",
-                "visitors can board an amphibious duck to explore the city",
+                Seq("visitors can board an amphibious duck to explore the city"),
                 Seq.empty,
                 Seq.empty
               ),
             ))
-          assertDataFrameNoOrderEquals(actual.toDF, expected.toDF)
+          assertDataFrameDataInColumnsEqual(actual.toDF, expected.toDF)
         }
 
       }
