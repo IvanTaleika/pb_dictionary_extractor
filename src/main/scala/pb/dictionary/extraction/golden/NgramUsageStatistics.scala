@@ -58,8 +58,7 @@ class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyAp
 
 object NgramUsageStatistics {
   type NgramDfEnricher = RemoteHttpDfEnricher[Row, Row]
-  val ApiEndpoint       = "https://books.google.com/ngrams/json"
-  // TODO: check if rate limiter is not 'unlimited' in real run
+  val ApiEndpoint = "https://books.google.com/ngrams/json"
   // Ngram API allows 30 requests in 1 minutes, but using 0.5 sometimes triggers request 31 at the end of the minute
   val SafeSingleTaskRps = 0.5 - 0.02
 
@@ -130,10 +129,10 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
     request
   }
 
-  override protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest,  i: Int) = {
+  override protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest, i: Int) = {
     import NgramEnricher._
     val validResponse = response.get
-    val statusLine         = validResponse.getStatusLine
+    val statusLine    = validResponse.getStatusLine
     statusLine.getStatusCode match {
       case HttpStatus.SC_OK =>
         super.processResponse(response)(request, i)

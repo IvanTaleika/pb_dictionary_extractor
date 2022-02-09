@@ -12,6 +12,10 @@ import org.mockito.invocation.InvocationOnMock
 import pb.dictionary.extraction.{RemoteHttpEnrichmentException, TestBase}
 import pb.dictionary.extraction.golden.NgramUsageStatistics.NgramDfEnricher
 
+// NOTE!!! DataFrame asserts hangs on rdd.unpersist step if `NgramDfEnricher` throw an exception.
+// The reason is unknown. This does not happen with `DictionaryApiDevWordDefiner`, nor it was fixed
+// by modifying the DAG in any ways. The issue is in unpersist call, so real run is not affected.
+// In case execution hangs for several minutes, app must be manually stopped.
 class NgramUsageStatisticsTest extends TestBase {
   import pb.dictionary.extraction.golden.DictionaryRecord._
 
@@ -241,7 +245,6 @@ class TestNgramRemoteHttpEnricher(responseCode: Int, responses: Map[String, Stri
       .thenAnswer((invocation: InvocationOnMock) => {
         val request = invocation.getArgument[HttpUriRequest](0)
         val url     = request.getURI.toString
-        // TODO: Failure happens on the worker and hang the system for some reason. This blocks any possible automation
         httpResponses.getOrElse(url, fail(s"Request to unexpected URL $url. Stop the execution if spark hangs."))
       })
     httpClientMock

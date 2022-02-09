@@ -136,7 +136,7 @@ class RemoteHttpDfEnricher[In, Out](enricherSummoner: Option[Double] => RemoteHt
     val adjusterRps =
       singleTaskRps.map(v => v / Math.max(ds.rdd.getNumPartitions, SparkSession.active.sparkContext.defaultParallelism))
     val enricher = enricherSummoner(adjusterRps)
-    ds.cache().map(enricher.enrich, outEncoder).cache()
+    ds.map(enricher.enrich, outEncoder).cache()
   }
 }
 

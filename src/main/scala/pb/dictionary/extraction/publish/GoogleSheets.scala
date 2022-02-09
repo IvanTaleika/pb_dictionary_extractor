@@ -40,8 +40,11 @@ class GoogleSheets(
       .as(publishedAlias)
       .join(golden.as(goldenAlias),
             DictionaryRecord.pk.map(cn => colPublished(cn) === colGolden(cn)).reduce(_ && _),
-            "fullOuter")
-    // TODO: test what is better, collect or window?
+            "full_outer")
+    // for calculated columns `collect` and `max().over()` generate the same DAG, except for
+    // the last step where the value is either fetched to master or broadcasted. However, in case the column
+    // is already stored in parquet file, collect can efficiently fetch it using metadata, while WF issues
+    // shuffle and actual value search
     val biggestSnapshotId = snapshot.select(ID).as[Int].orderBy(col(ID).desc).head(1).headOption.getOrElse(0)
     val rnCol             = "rowNumber"
     val newSheet = mergedStates
