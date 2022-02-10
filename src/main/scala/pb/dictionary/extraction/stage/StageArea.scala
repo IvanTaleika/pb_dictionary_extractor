@@ -11,15 +11,15 @@ import java.time.{ZonedDateTime, ZoneOffset}
 class StageArea(
     path: String,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends CsvArea[DeviceHighlight, HighlightedText](path, timestampProvider) {
+) extends CsvArea[HighlightedText](path, timestampProvider) {
   import HighlightedText._
   import spark.implicits._
 
-  override def upsert(previousSnapshot: Dataset[DeviceHighlight]): Dataset[HighlightedText] = {
-    previousSnapshot.transform(findUpdates).transform(fromUserHighlights).transform(writeSnapshot)
+  def upsert(previousSnapshot: Dataset[DeviceHighlight]): Dataset[HighlightedText] = {
+    previousSnapshot.transform(findUpdates).transform(fromUserHighlights).transform(write)
   }
 
-  override protected def findUpdates(previousSnapshot: Dataset[DeviceHighlight]) = {
+  private def findUpdates(previousSnapshot: Dataset[DeviceHighlight]) = {
     // TODO: check filter pushdowns when working with DB
     previousSnapshot.where(col(OID) > lit(latestOid))
   }

@@ -3,7 +3,7 @@ package pb.dictionary.extraction.bronze
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
-import pb.dictionary.extraction.DeltaArea
+import pb.dictionary.extraction.{AreaUtils, DeltaArea}
 import pb.dictionary.extraction.stage.HighlightedText
 
 import java.sql.Timestamp
@@ -12,11 +12,11 @@ import java.time.{ZonedDateTime, ZoneOffset}
 class BronzeArea(
     path: String,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends DeltaArea[HighlightedText, CleansedText](path) {
+) extends DeltaArea[CleansedText](path) {
   import CleansedText._
 
-  override def upsert(previousSnapshot: Dataset[HighlightedText]): Dataset[CleansedText] = {
-    previousSnapshot.transform(findUpdates).transform(fromStage).transform(updateArea)
+  def upsert(previousSnapshot: Dataset[HighlightedText]): Dataset[CleansedText] = {
+    previousSnapshot.transform(AreaUtils.findUpdatesByUpdateTimestamp(snapshot)).transform(fromStage).transform(updateArea)
   }
 
   private def fromStage(stage: Dataset[HighlightedText]): DataFrame = {

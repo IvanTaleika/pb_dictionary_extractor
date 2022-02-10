@@ -2,7 +2,7 @@ package pb.dictionary.extraction.silver
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.DeltaArea
+import pb.dictionary.extraction.{AreaUtils, DeltaArea}
 import pb.dictionary.extraction.bronze.CleansedText
 
 import java.sql.Timestamp
@@ -13,12 +13,12 @@ class SilverArea(
     path: String,
     definitionApi: WordDefinitionApi,
     timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
-) extends DeltaArea[CleansedText, DefinedText](path) {
+) extends DeltaArea[DefinedText](path) {
   import DefinedText._
   import spark.implicits._
 
-  override def upsert(previousSnapshot: Dataset[CleansedText]): Dataset[DefinedText] = {
-    val (existingDefinitions, newEntries) = findUndefined(previousSnapshot.transform(findUpdates))
+  def upsert(previousSnapshot: Dataset[CleansedText]): Dataset[DefinedText] = {
+    val (existingDefinitions, newEntries) = findUndefined(AreaUtils.findUpdatesByUpdateTimestamp(snapshot)(previousSnapshot))
     val newDefinitions                    = definitionApi.define(newEntries)
     val allUpdates                        = buildUpdateDf(existingDefinitions, newDefinitions)
     updateArea(allUpdates)

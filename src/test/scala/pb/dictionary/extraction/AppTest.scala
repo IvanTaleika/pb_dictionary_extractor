@@ -7,7 +7,7 @@ import org.apache.spark.sql.functions.lit
 import pb.dictionary.extraction.bronze.{BronzeArea, CleansedText}
 import pb.dictionary.extraction.device.{DeviceHighlight, DeviceHighlightsDb}
 import pb.dictionary.extraction.golden._
-import pb.dictionary.extraction.publish.{GoogleSheets, ManualEnrichmentArea}
+import pb.dictionary.extraction.publish.{GoogleSheetsArea, ManualEnrichmentArea}
 import pb.dictionary.extraction.silver.{
   DictionaryApiDevEnricher,
   DictionaryApiDevParallelHttpEnricher,
@@ -51,7 +51,7 @@ class AppTest extends TestBase {
       val silverArea = new SilverArea(silverAreaPath, DictionaryApiDevWordDefiner())
       val goldenArea           = new GoldenArea(goldenAreaPath, new DummyDictionaryTranslator(), NgramUsageStatistics())
       val manualEnrichmentArea = new ManualEnrichmentArea(manualEnrichmentPath)
-      val publish              = new GoogleSheets(googleSheetsPublishPath)
+      val publish              = new GoogleSheetsArea(googleSheetsPublishPath)
 
 
       val deviceHighlightsSample = spark.read

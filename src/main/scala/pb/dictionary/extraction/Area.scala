@@ -1,8 +1,8 @@
 package pb.dictionary.extraction
 
 import grizzled.slf4j.Logger
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoders, SaveMode, SparkSession}
-import org.apache.spark.sql.functions.format_string
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions.date_format
 import org.apache.spark.sql.types.StructType
 import pb.dictionary.extraction.ApplicationManagedProduct._
 
@@ -24,8 +24,7 @@ import org.apache.spark.sql.functions.{col, lit}
 import java.nio.file.Paths
 import java.sql.Timestamp
 
-abstract class ApplicationManagedArea[In, Out <: ApplicationManagedProduct: TypeTag](val path: String,
-                                                                                     val format: String)
+abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: TypeTag](val path: String, val format: String)
     extends Area[Out] {
   protected val absoluteTableLocation = Paths.get(path).toAbsolutePath
   val absoluteTablePath               = absoluteTableLocation.toUri.getPath
@@ -36,8 +35,8 @@ abstract class ApplicationManagedArea[In, Out <: ApplicationManagedProduct: Type
   logger.info(s"Initializing `$format` table `$databaseName`.`$tableName`.")
   initTable()
 
-  /** Upsert records from lower tier area by PK and returns new records. */
-  def upsert(previousSnapshot: Dataset[In]): Dataset[Out]
+//  /** Upsert records from lower tier area by PK and returns new records. */
+//  def upsert(previousSnapshot: Dataset[In]): Dataset[Out]
 
   protected def tableOptions    = Map.empty[String, String]
   protected def tablePartitions = Seq.empty[String]
@@ -54,18 +53,18 @@ abstract class ApplicationManagedArea[In, Out <: ApplicationManagedProduct: Type
     spark.sql(tableCreationStmt)
   }
 
-  protected def findUpdates(previousSnapshot: Dataset[In]): Dataset[In] = {
-    import spark.implicits._
-    val condition = snapshot
-      .select(col(UPDATED_AT))
-      .as[Timestamp]
-      .orderBy(col(UPDATED_AT).desc_nulls_last)
-      .head(1)
-      .headOption
-      .map(col(UPDATED_AT) > _)
-      .getOrElse(lit(true))
-    previousSnapshot.where(condition)
-  }
+//  protected def findUpdates(previousSnapshot: Dataset[In]): Dataset[In] = {
+//    import spark.implicits._
+//    val condition = snapshot
+//      .select(col(UPDATED_AT))
+//      .as[Timestamp]
+//      .orderBy(col(UPDATED_AT).desc_nulls_last)
+//      .head(1)
+//      .headOption
+//      .map(col(UPDATED_AT) > _)
+//      .getOrElse(lit(true))
+//    previousSnapshot.where(condition)
+//  }
 
   override def snapshot: Dataset[Out] = {
     import spark.implicits._
@@ -75,8 +74,8 @@ abstract class ApplicationManagedArea[In, Out <: ApplicationManagedProduct: Type
 
 import io.delta.tables.DeltaTable
 
-abstract class DeltaArea[In, Out <: ApplicationManagedProduct: TypeTag](path: String)
-    extends ApplicationManagedArea[In, Out](path, "delta") {
+abstract class DeltaArea[Out <: ApplicationManagedProduct: TypeTag](path: String)
+    extends ApplicationManagedArea[Out](path, "delta") {
   protected def deltaTable                                   = DeltaTable.forPath(absoluteTablePath)
   protected def stagingAlias                                 = "staging"
   protected def colFromTable(tableAlias: String)(cn: String) = col(s"$tableAlias.$cn")
@@ -84,8 +83,8 @@ abstract class DeltaArea[In, Out <: ApplicationManagedProduct: TypeTag](path: St
   protected def colStaged(cn: String)                        = colFromTable(stagingAlias)(cn)
 }
 
-abstract class CsvArea[In, Out <: ApplicationManagedProduct: TypeTag](path: String, timestampProvider: () => Timestamp)
-    extends ApplicationManagedArea[In, Out](path, "csv") {
+abstract class CsvArea[Out <: ApplicationManagedProduct: TypeTag](path: String, timestampProvider: () => Timestamp)
+    extends ApplicationManagedArea[Out](path, "csv") {
 
   protected def outputFiles: Option[Int] = Option.empty
 
@@ -103,7 +102,7 @@ abstract class CsvArea[In, Out <: ApplicationManagedProduct: TypeTag](path: Stri
     }
   }
 
-  protected def writeSnapshot(df: DataFrame): Dataset[Out] = {
+  protected def write(df: DataFrame): Dataset[Out] = {
     val updateTimestamp = timestampProvider()
 
     val outDf = df
@@ -120,12 +119,12 @@ abstract class CsvArea[In, Out <: ApplicationManagedProduct: TypeTag](path: Stri
     snapshot
   }
 
-  protected def timestampToCsvString(c: Column) = format_string("yyyy-MM-dd HH:mm:ss", c)
+  protected def timestampToCsvString(c: Column) = date_format(c, "yyyy-MM-dd HH:mm:ss")
 }
 
-abstract class CsvSnapshotsArea[In, Out <: ApplicationManagedProduct: TypeTag](path: String,
-                                                                               timestampProvider: () => Timestamp)
-    extends CsvArea[In, Out](path, timestampProvider) {
+abstract class CsvSnapshotsArea[Out <: ApplicationManagedProduct: TypeTag](path: String,
+                                                                           timestampProvider: () => Timestamp)
+    extends CsvArea[Out](path, timestampProvider) {
 
   override def snapshot: Dataset[Out] = {
     import spark.implicits._
@@ -134,3 +133,5 @@ abstract class CsvSnapshotsArea[In, Out <: ApplicationManagedProduct: TypeTag](p
     latestSnapshotTimestamp.headOption.map(t => history.where(col(UPDATED_AT) === t)).getOrElse(history)
   }
 }
+
+

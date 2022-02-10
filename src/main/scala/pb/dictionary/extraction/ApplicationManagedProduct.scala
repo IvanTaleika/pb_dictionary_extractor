@@ -36,7 +36,7 @@ abstract class ApplicationManagedProductCompanion[T <: ApplicationManagedProduct
   def enrichedAttributesFields: Seq[StructField]    = enrichedAttributes.map(colParameters)
   def metadataFields: Seq[StructField]              = metadata.map(colParameters)
 
-  private lazy val colParameters = {
+  protected lazy val colParameters = {
     val searchSchema = schema.map(dt => dt.name -> dt).toMap
     (cn: String) =>
       searchSchema(cn)

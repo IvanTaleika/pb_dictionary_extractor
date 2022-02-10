@@ -5,7 +5,7 @@ import org.apache.spark.sql.SparkSession
 import pb.dictionary.extraction.bronze.BronzeArea
 import pb.dictionary.extraction.device.DeviceHighlightsDb
 import pb.dictionary.extraction.golden.GoldenArea
-import pb.dictionary.extraction.publish.{GoogleSheets, ManualEnrichmentArea}
+import pb.dictionary.extraction.publish.{GoogleSheetsArea, ManualEnrichmentArea}
 import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
@@ -61,18 +61,17 @@ object App {
                        silverArea: SilverArea,
                        goldenArea: GoldenArea,
                        manualEnrichmentArea: ManualEnrichmentArea,
-                       publisher: GoogleSheets) = {
+                       publisher: GoogleSheetsArea) = {
     deviceHighlights.snapshot
       .transform(df => stageArea.upsert(df))
       .transform(df => bronze.upsert(df))
       .transform(df => silverArea.upsert(df))
-      .transform { df =>
-        manualEnrichmentArea.upsert(df)
-        goldenArea.upsert(df)
+      .transform(df => goldenArea.upsert(df))
+      .transform(df => publisher.upsert(df))
+      .transform { publishSnapshot =>
+        val silverSnapshot = silverArea.snapshot
+        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
       }
-    logger.info("Golden area was built successfully")
-    // TODO: type safe
-//    publisher.publish(goldenArea.snapshot.toDF)
   }
 //  SparkSession.active.table("updateDictionary.silver").orderBy(org.apache.spark.sql.functions.col("occurrences").desc).show(false)
 }

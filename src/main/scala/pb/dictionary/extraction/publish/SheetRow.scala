@@ -11,7 +11,7 @@ case class SheetRow(
     partOfSpeech: String,
     phonetic: String,
     forms: String,
-    source: String,
+    sources: String,
     occurrences: Int,
     firstOccurrence: String,
     latestOccurrence: String,
@@ -23,24 +23,19 @@ case class SheetRow(
     usage: String,
     // CSV does not support timestamp - this is a partition column
     updatedAt: Timestamp,
-) extends ApplicationManagedProduct
+) extends FinalPublishProduct
 
-object SheetRow extends ApplicationManagedProductCompanion[SheetRow] {
-  val ID              = "id"
-  val pk: Seq[String] = Seq(ID)
+object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
 
-  val NORMALIZED_TEXT = "normalizedText"
-  val PART_OF_SPEECH  = "partOfSpeech"
-  val PHONETIC        = "phonetic"
-  val FORMS           = "forms"
-  val OCCURRENCES     = "occurrences"
-  val DEFINITION      = "definition"
-  val TRANSLATION     = "translation"
+  val PART_OF_SPEECH = "partOfSpeech"
+  val PHONETIC       = "phonetic"
+  val OCCURRENCES    = "occurrences"
+  val TRANSLATION    = "translation"
   val propagatingAttributes: Seq[String] =
     Seq(NORMALIZED_TEXT, PART_OF_SPEECH, PHONETIC, FORMS, OCCURRENCES, DEFINITION, TRANSLATION)
 
   val STATUS            = "status"
-  val SOURCE            = "source"
+  val SOURCES           = "sources"
   val FIRST_OCCURRENCE  = "firstOccurrence"
   val LATEST_OCCURRENCE = "latestOccurrence"
   val EXAMPLES          = "examples"
@@ -48,10 +43,30 @@ object SheetRow extends ApplicationManagedProductCompanion[SheetRow] {
   val ANTONYMS          = "antonyms"
   val USAGE             = "usage"
   val enrichedAttributes: Seq[String] =
-    Seq(STATUS, SOURCE, FIRST_OCCURRENCE, LATEST_OCCURRENCE, EXAMPLES, SYNONYMS, ANTONYMS, USAGE)
+    Seq(STATUS, SOURCES, FIRST_OCCURRENCE, LATEST_OCCURRENCE, EXAMPLES, SYNONYMS, ANTONYMS, USAGE)
+
+  val attributesOrder = Seq(
+    ID,
+    STATUS,
+    NORMALIZED_TEXT,
+    PART_OF_SPEECH,
+    PHONETIC,
+    FORMS,
+    SOURCES,
+    OCCURRENCES,
+    FIRST_OCCURRENCE,
+    LATEST_OCCURRENCE,
+    DEFINITION,
+    EXAMPLES,
+    SYNONYMS,
+    ANTONYMS,
+    TRANSLATION,
+    USAGE
+  )
 
   val NewStatus        = "new"
   val InProgressStatus = "in progress"
   val LearnedStatus    = "learned"
+  val UsageDecimals    = 6
 
 }

@@ -71,9 +71,11 @@ class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDe
 
     val formattedDf = thirdLevelExplodedDf
       .withColumnRenamed(NormalizedDefinition.WORD, DefinedText.NORMALIZED_TEXT)
-      .withColumn(DefinedText.EXAMPLES,
-                  when(col(Definition.EXAMPLE).isNotNull, array(col(Definition.EXAMPLE)))
-                    .otherwise(lit(Array.empty[String]))) // API provides a single example only
+      .withColumn(
+        DefinedText.EXAMPLES,
+        when(col(Definition.EXAMPLE).isNotNull && col(Definition.DEFINITION).isNotNull, array(col(Definition.EXAMPLE)))
+          .when(col(Definition.DEFINITION).isNotNull, lit(Array.empty[String]))
+      ) // API provides a single example only
       .drop(Definition.EXAMPLE)
     formattedDf
   }

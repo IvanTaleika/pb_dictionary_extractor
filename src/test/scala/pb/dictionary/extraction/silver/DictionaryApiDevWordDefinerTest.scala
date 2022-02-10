@@ -82,7 +82,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
               null
             )),
         )
-        assertDataFrameDataInColumnsEqual(actual.toDF, expected.toDF)
+        assertDataFrameDataInColumnsEqual(expected.toDF, actual.toDF)
       }
     }
 
@@ -149,7 +149,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
               Seq("affable", "easy-going")
             ))
         )
-        assertDataFrameDataInColumnsEqual(actual.toDF, expected.toDF)
+        assertDataFrameDataInColumnsEqual(expected.toDF, actual.toDF)
       }
 
       describe("And create a separate row in the output for each definition") {
@@ -246,7 +246,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 Seq("modernizer")
               )
             ))
-          assertDataFrameDataInColumnsEqual(actual.toDF, expected.toDF)
+          assertDataFrameDataInColumnsEqual(expected.toDF, actual.toDF)
         }
 
         it("when text has multiple meanings") {
@@ -343,7 +343,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
                 Seq.empty
               ),
             ))
-          assertDataFrameDataInColumnsEqual(actual.toDF, expected.toDF)
+          assertDataFrameDataInColumnsEqual(expected.toDF, actual.toDF)
         }
 
       }
