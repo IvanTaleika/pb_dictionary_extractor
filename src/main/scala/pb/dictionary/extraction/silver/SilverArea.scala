@@ -8,7 +8,6 @@ import pb.dictionary.extraction.bronze.CleansedText
 import java.sql.Timestamp
 import java.time.{ZonedDateTime, ZoneOffset}
 
-// TODO: definition may be in different cases (e.g.  abbreviations like "MY")
 class SilverArea(
     path: String,
     definitionApi: WordDefinitionApi,
@@ -18,24 +17,31 @@ class SilverArea(
   import spark.implicits._
 
   def upsert(previousSnapshot: Dataset[CleansedText]): Dataset[DefinedText] = {
-    val (existingDefinitions, newEntries) = findUndefined(AreaUtils.findUpdatesByUpdateTimestamp(snapshot)(previousSnapshot))
-    val newDefinitions                    = definitionApi.define(newEntries)
-    val allUpdates                        = buildUpdateDf(existingDefinitions, newDefinitions)
+    val (existingDefinitions, undefinedEntries) = findUndefined(
+      AreaUtils.findUpdatesByUpdateTimestamp(snapshot)(previousSnapshot))
+    val newDefinitions = definitionApi.define(undefinedEntries)
+    val allUpdates     = buildUpdateDf(existingDefinitions, newDefinitions)
     updateArea(allUpdates)
   }
 
-  // TODO: retry definition search for old words without definitions?
   private def findUndefined(bronze: Dataset[CleansedText]) = {
-    val newDefinitions = bronze.join(snapshot, Seq(TEXT), "left_anti").as[CleansedText]
-    val oldDefinitions = bronze
-      .as("updates")
-      .join(
-        newDefinitions.as("definitions"),
-        col(s"updates.$TEXT") === col(s"definitions.$TEXT"),
-        "left_anti"
-      )
+    val cachedBronze    = bronze.cache()
+    val cachedSilver    = snapshot.cache()
+    val definedSilver   = cachedSilver.where(col(NORMALIZED_TEXT).isNotNull)
+    val undefinedSilver = cachedSilver.where(col(NORMALIZED_TEXT).isNull)
+
+    val updatedDefinitions            = cachedBronze.join(definedSilver, Seq(TEXT), "left_semi").as[CleansedText]
+    val newUndefinedEntries           = cachedBronze.join(cachedSilver, Seq(TEXT), "left_anti").as[CleansedText]
+    val updatedUndefinedEntries       = cachedBronze.join(undefinedSilver, Seq(TEXT), "left_semi").as[CleansedText]
+    val newAndUpdatedUndefinedEntries = newUndefinedEntries.union(updatedUndefinedEntries)
+    val undefinedEntriesWithoutUpdates = undefinedSilver
+      .join(newAndUpdatedUndefinedEntries, Seq(TEXT), "left_anti")
+      .select(cachedBronze.columns.map(col): _*)
       .as[CleansedText]
-    (oldDefinitions, newDefinitions)
+
+    val undefinedEntries = newAndUpdatedUndefinedEntries.union(undefinedEntriesWithoutUpdates)
+
+    (updatedDefinitions, undefinedEntries)
   }
 
   private def buildUpdateDf(existingEntries: Dataset[CleansedText], newDefinitions: DataFrame): Dataset[DefinedText] = {
@@ -59,8 +65,10 @@ class SilverArea(
     deltaTable
       .as(tableName)
       .merge(updates.toDF().as(stagingAlias), colDelta(TEXT) === colStaged(TEXT))
-      .whenMatched()
+      .whenMatched(colStaged(NORMALIZED_TEXT).isNull)
       .update((propagatingAttributes :+ UPDATED_AT).map(c => c -> colStaged(c)).toMap)
+      .whenMatched(colStaged(NORMALIZED_TEXT).isNotNull)
+      .update((propagatingAttributes ++ enrichedAttributes ++ Seq(UPDATED_AT)).map(c => c -> colStaged(c)).toMap)
       .whenNotMatched()
       .insertAll()
       .execute()

@@ -188,95 +188,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
     it("Should send text to definition API and insert its result into the table if text isn't defined yet") {
       import spark.implicits._
 
-      val updates = spark.createDataset(
-        Seq(
-          CleansedText(
-            "agsbgf",
-            Seq("testBook"),
-            2,
-            t"1999-01-02T01:01:01Z",
-            t"1999-01-03T01:01:01Z",
-            t"1999-01-04T01:01:01Z"
-          ),
-          CleansedText(
-            "diehard",
-            Seq("testBook", "testBook2"),
-            3,
-            t"1998-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
-            t"1999-01-04T01:01:01Z"
-          )
-        )
-      )
-
-      val definedUpdates = spark
-        .createDataset(
-          Seq(
-            DefinedText(
-              "agsbgf",
-              Seq("testBook"),
-              2,
-              t"1999-01-02T01:01:01Z",
-              t"1999-01-03T01:01:01Z",
-              t"1999-01-04T01:01:01Z",
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-            ),
-            DefinedText(
-              "diehard",
-              Seq("testBook", "testBook2"),
-              3,
-              t"1998-01-01T01:01:01Z",
-              t"1999-01-01T01:01:01Z",
-              t"1999-01-04T01:01:01Z",
-              "diehard",
-              "ˈdʌɪhɑːd",
-              "noun",
-              "a person who strongly opposes change or who continues to support something in spite of opposition.",
-              Seq("a diehard Yankees fan"),
-              Seq("hard-line", "...", "blimp"),
-              Seq("modernizer")
-            )
-          )
-        )
-        .drop(UPDATED_AT)
-
-      val wordDefinitionApi = mock[WordDefinitionApi]
-      (wordDefinitionApi.define _)
-        .expects(new FunctionAdapter1[Dataset[CleansedText], Boolean](ds => {
-          assertDataFrameNoOrderEquals(ds.toDF(), updates.toDF())
-          true
-        }))
-        .returns(definedUpdates)
-        .once()
-      val area = new SilverArea(areaPath, wordDefinitionApi, testTimestampProvider)
-
-      val ingestedBronze = spark.createDataset(
-        Seq(
-          CleansedText(
-            "die hard",
-            Seq("testBook"),
-            1,
-            t"1999-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
-          ),
-          CleansedText(
-            "peevish",
-            Seq("testBook"),
-            1,
-            t"1999-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
-          ),
-        )
-      )
-      val initialState = spark.createDataset(
+      val initialSilverState = spark.createDataset(
         Seq(
           DefinedText(
             "die hard",
@@ -284,7 +196,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             1,
             t"1999-01-01T01:01:01Z",
             t"1999-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
             "die hard",
             null,
             null,
@@ -299,7 +211,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             1,
             t"1999-01-01T01:01:01Z",
             t"1999-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
             "diehard",
             "ˈdʌɪhɑːd",
             "noun",
@@ -314,7 +226,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             1,
             t"1999-01-01T01:01:01Z",
             t"1999-01-01T01:01:01Z",
-            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
             "peevish",
             "ˈpiːvɪʃ",
             "adjective",
@@ -322,17 +234,275 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a thin peevish voice"),
             Seq("irritable", "...", "miffy"),
             Seq("affable", "easy-going")
+          ),
+          DefinedText(
+            "agsbgf",
+            Seq("testBook"),
+            1,
+            t"1999-01-02T01:01:01Z",
+            t"1999-01-02T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+          ),
+          DefinedText(
+            "text without definition",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
           )
         )
       )
 
-      initialState.write.format("delta").mode(SaveMode.Append).saveAsTable(area.fullTableName)
+      val bronzeSnapshot = spark.createDataset(
+        Seq(
+          CleansedText(
+            "agsbgf",
+            Seq("testBook"),
+            2,
+            t"1999-01-02T01:01:01Z",
+            t"1999-01-03T01:01:01Z",
+            t"1999-01-05T01:01:01Z"
+          ),
+          CleansedText(
+            "diehard",
+            Seq("testBook", "testBook2"),
+            3,
+            t"1998-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-05T01:01:01Z"
+          ),
+          CleansedText(
+            "die hard",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+          ),
+          CleansedText(
+            "peevish",
+            Seq("testBook"),
+            2,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
+            t"1999-01-05T01:01:01Z",
+          ),
+          CleansedText(
+            "text without definition",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+          ),
+        )
+      )
 
-      val bronzeSnapshot = ingestedBronze.unionByName(updates)
-      val actual         = area.upsert(bronzeSnapshot)
-      val expected =
-        definedUpdates.withColumn(DefinedText.UPDATED_AT, lit(testTimestamp)).unionByName(initialState.toDF())
-      assertDataFrameDataEquals(expected, actual.toDF())
+      val undefinedEntries = spark.createDataset(
+        Seq(
+          CleansedText(
+            "agsbgf",
+            Seq("testBook"),
+            2,
+            t"1999-01-02T01:01:01Z",
+            t"1999-01-03T01:01:01Z",
+            t"1999-01-05T01:01:01Z"
+          ),
+          CleansedText(
+            "diehard",
+            Seq("testBook", "testBook2"),
+            3,
+            t"1998-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-05T01:01:01Z"
+          ),
+          CleansedText(
+            "text without definition",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
+          ),
+        )
+      )
+
+      val definitionApiResult = spark
+        .createDataset(
+          Seq(
+            DefinedText(
+              "agsbgf",
+              Seq("testBook"),
+              2,
+              t"1999-01-02T01:01:01Z",
+              t"1999-01-03T01:01:01Z",
+              t"1999-01-05T01:01:01Z",
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+            ),
+            DefinedText(
+              "diehard",
+              Seq("testBook", "testBook2"),
+              3,
+              t"1998-01-01T01:01:01Z",
+              t"1999-01-01T01:01:01Z",
+              t"1999-01-05T01:01:01Z",
+              "diehard",
+              "ˈdʌɪhɑːd",
+              "noun",
+              "a person who strongly opposes change or who continues to support something in spite of opposition.",
+              Seq("a diehard Yankees fan"),
+              Seq("hard-line", "...", "blimp"),
+              Seq("modernizer")
+            ),
+            DefinedText(
+              "text without definition",
+              Seq("testBook"),
+              1,
+              t"1999-01-01T01:01:01Z",
+              t"1999-01-01T01:01:01Z",
+              t"1999-01-04T01:01:01Z",
+              "text without definition",
+              null,
+              null,
+              "forgotten definition",
+              Seq.empty,
+              Seq.empty,
+              Seq.empty,
+            ),
+          )
+        )
+        .drop(UPDATED_AT)
+
+      val wordDefinitionApi = mock[WordDefinitionApi]
+      (wordDefinitionApi.define _)
+        .expects(new FunctionAdapter1[Dataset[CleansedText], Boolean](actual => {
+          assertDataFrameDataEquals(actual.toDF(), undefinedEntries.toDF())
+          true
+        }))
+        .returns(definitionApiResult)
+        .once()
+      val area = new SilverArea(areaPath, wordDefinitionApi, testTimestampProvider)
+
+      initialSilverState.write.format("delta").mode(SaveMode.Append).saveAsTable(area.fullTableName)
+
+      val actual = area.upsert(bronzeSnapshot)
+      val expected = spark.createDataset(
+        Seq(
+          DefinedText(
+            "die hard",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
+            "die hard",
+            null,
+            null,
+            "disappear or change very slowly.",
+            Seq("old habits die hard"),
+            Seq.empty,
+            Seq.empty
+          ),
+          DefinedText(
+            "die hard",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
+            "diehard",
+            "ˈdʌɪhɑːd",
+            "noun",
+            "a person who strongly opposes change or who continues to support something in spite of opposition.",
+            Seq("a diehard Yankees fan"),
+            Seq("hard-line", "...", "blimp"),
+            Seq("modernizer")
+          ),
+          DefinedText(
+            "peevish",
+            Seq("testBook"),
+            2,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-04T01:01:01Z",
+            testTimestamp,
+            "peevish",
+            "ˈpiːvɪʃ",
+            "adjective",
+            "having or showing an irritable disposition.",
+            Seq("a thin peevish voice"),
+            Seq("irritable", "...", "miffy"),
+            Seq("affable", "easy-going")
+          ),
+          DefinedText(
+            "diehard",
+            Seq("testBook", "testBook2"),
+            3,
+            t"1998-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            testTimestamp,
+            "diehard",
+            "ˈdʌɪhɑːd",
+            "noun",
+            "a person who strongly opposes change or who continues to support something in spite of opposition.",
+            Seq("a diehard Yankees fan"),
+            Seq("hard-line", "...", "blimp"),
+            Seq("modernizer")
+          ),
+          DefinedText(
+            "agsbgf",
+            Seq("testBook"),
+            2,
+            t"1999-01-02T01:01:01Z",
+            t"1999-01-03T01:01:01Z",
+            testTimestamp,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+          ),
+          DefinedText(
+            "text without definition",
+            Seq("testBook"),
+            1,
+            t"1999-01-01T01:01:01Z",
+            t"1999-01-01T01:01:01Z",
+            testTimestamp,
+            "text without definition",
+            null,
+            null,
+            "forgotten definition",
+            Seq.empty,
+            Seq.empty,
+            Seq.empty,
+          )
+        )
+      )
+
+      assertDataFrameDataEquals(expected.toDF(), actual.toDF())
     }
   }
 }
