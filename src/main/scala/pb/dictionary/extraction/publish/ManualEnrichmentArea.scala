@@ -6,15 +6,14 @@ import pb.dictionary.extraction.silver.DefinedText
 import pb.dictionary.extraction.CsvSnapshotsArea
 
 import java.sql.Timestamp
-import java.time.{ZonedDateTime, ZoneOffset}
 
 // TODO: write directly to Google Docs? Export csv programmatically? Rename output file?
 class ManualEnrichmentArea(
     path: String,
-    timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
+    timestampProvider: () => Timestamp
 ) extends CsvSnapshotsArea[UndefinedText](path, timestampProvider) {
-  import UndefinedText._
   import FinalPublishProduct._
+  import UndefinedText._
   override protected def outputFiles = Option(1)
 
   def upsert[T <: FinalPublishProduct](

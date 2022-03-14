@@ -8,3 +8,4 @@ project/target
 .metals
 /dictionary
 *.sc
+conf

@@ -8,13 +8,14 @@ import pb.dictionary.extraction.golden.DictionaryRecord
 import pb.dictionary.extraction.golden.DictionaryRecord._
 
 import java.sql.Timestamp
+
 // We can also use Google API in foreach/map function https://developers.google.com/sheets/api/guides/values
 // or excel spark connector https://github.com/crealytics/spark-excel
-class GoogleSheetsArea(
+class CsvPublishArea(
     path: String,
     timestampProvider: () => Timestamp
-) extends CsvSnapshotsArea[SheetRow](path, timestampProvider) {
-  import SheetRow._
+) extends CsvSnapshotsArea[CsvRow](path, timestampProvider) {
+  import CsvRow._
   import spark.implicits._
   // FIXME: this will work badly with examples column
   private val arrayJoin = ", "
@@ -22,7 +23,7 @@ class GoogleSheetsArea(
   override protected def outputFiles = Option(1)
 
   /** Upsert records from lower tier area by PK and returns new records. */
-  def upsert(previousSnapshot: Dataset[DictionaryRecord]): Dataset[SheetRow] = {
+  def upsert(previousSnapshot: Dataset[DictionaryRecord]): Dataset[CsvRow] = {
     previousSnapshot.transform(fromGolden).transform(write)
   }
 

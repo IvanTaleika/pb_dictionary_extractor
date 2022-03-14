@@ -667,7 +667,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       s"Should select the latest definition (silver) attributes ordering by update time and merge " +
         s"highlighting (bronze) info grouping by $NORMALIZED_TEXT and $DEFINITION") {
       import spark.implicits._
-      val area = new GoldenArea(areaPath, null, null)
+      val area = new GoldenArea(areaPath, null, null, null)
       val definedFords = spark.createDataset(
         Seq(
           DefinedText(

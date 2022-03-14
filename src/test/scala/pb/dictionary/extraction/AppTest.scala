@@ -4,20 +4,19 @@ import com.google.common.util.concurrent.RateLimiter
 import grizzled.slf4j.Logger
 import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.functions.lit
+import org.scalatest.tags.Slow
 import pb.dictionary.extraction.bronze.{BronzeArea, CleansedText}
 import pb.dictionary.extraction.device.{DeviceHighlight, DeviceHighlightsDb}
 import pb.dictionary.extraction.golden._
-import pb.dictionary.extraction.publish.{GoogleSheetsArea, ManualEnrichmentArea}
-import pb.dictionary.extraction.silver.{
-  DictionaryApiDevEnricher,
-  DictionaryApiDevParallelHttpEnricher,
-  DictionaryApiDevWordDefiner,
-  SilverArea
-}
+import pb.dictionary.extraction.publish.{CsvPublishArea, GoogleSheetsArea, ManualEnrichmentArea}
+import pb.dictionary.extraction.silver.{DictionaryApiDevEnricher, DictionaryApiDevParallelHttpEnricher, DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
+import java.sql.Timestamp
+import java.time.{ZonedDateTime, ZoneOffset}
 import scala.collection.mutable.ArrayBuffer
 
+@Slow
 class AppTest extends TestBase {
 
   val testDir = "target/AppTest/updateDictionary"
@@ -45,18 +44,20 @@ class AppTest extends TestBase {
 
       val deviceHighlights      = stub[DeviceHighlightsDb]
       val deviceHighlightSchema = Encoders.product[DeviceHighlight].schema
+      val appRunTimestamp       = Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
+      val timestampProvider     = () => appRunTimestamp
 
-      val stageArea  = new StageArea(stageAreaPath)
-      val bronzeArea = new BronzeArea(bronzeAreaPath)
-      val silverArea = new SilverArea(silverAreaPath, DictionaryApiDevWordDefiner())
-      val goldenArea           = new GoldenArea(goldenAreaPath, new DummyDictionaryTranslator(), NgramUsageStatistics())
-      val manualEnrichmentArea = new ManualEnrichmentArea(manualEnrichmentPath)
-      val publish              = new GoogleSheetsArea(googleSheetsPublishPath)
-
+      val stageArea  = new StageArea(stageAreaPath, timestampProvider)
+      val bronzeArea = new BronzeArea(bronzeAreaPath, timestampProvider)
+      val silverArea = new SilverArea(silverAreaPath, DictionaryApiDevWordDefiner(), timestampProvider)
+      val goldenArea =
+        new GoldenArea(goldenAreaPath, new DummyDictionaryTranslator(), NgramUsageStatistics(), timestampProvider)
+      val manualEnrichmentArea = new ManualEnrichmentArea(manualEnrichmentPath, timestampProvider)
+      val publish              = new CsvPublishArea(googleSheetsPublishPath, timestampProvider)
 
       val deviceHighlightsSample = spark.read
         .format("csv")
-        .options( Map("enforceSchema" -> "false", "mode" -> "FAILFAST", "multiline" -> "true", "header" -> "true"))
+        .options(Map("enforceSchema" -> "false", "mode" -> "FAILFAST", "multiline" -> "true", "header" -> "true"))
         .schema(deviceHighlightSchema)
         .load(sampleFile)
         .orderBy(DeviceHighlight.OID)
@@ -76,7 +77,7 @@ class AppTest extends TestBase {
         manualEnrichmentArea,
         publish
       )
-//      Thread.sleep(1000000)
+      Thread.sleep(1000000)
     }
   }
 }

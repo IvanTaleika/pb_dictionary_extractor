@@ -5,11 +5,13 @@ import pb.dictionary.extraction.ApplicationManagedAreaTestBase
 import pb.dictionary.extraction.golden.DictionaryRecord
 
 import java.io.File
+import java.sql.Timestamp
+import java.time.{ZonedDateTime, ZoneOffset}
 import scala.reflect.io.Directory
 
-class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
+class CsvPublishAreaTest extends ApplicationManagedAreaTestBase {
   override val areaName: String = "googleSheets"
-  import SheetRow._
+  import CsvRow._
 
   describe("upsert method") {
     it(
@@ -17,7 +19,7 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
         "casting timestamps to string and assigning an id by the first text occurrence time if there " +
         "are not data in google sheets yet") {
       import spark.implicits._
-      val area = new GoogleSheetsArea(areaPath, testTimestampProvider)
+      val area = new CsvPublishArea(areaPath, testTimestampProvider)
       val goldenSnapshot = spark.createDataset(
         Seq(
           DictionaryRecord(
@@ -60,9 +62,9 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
       val actual = area.upsert(goldenSnapshot)
       val expected = spark.createDataset(
         Seq(
-          SheetRow(
+          CsvRow(
             1,
-            SheetRow.NewStatus,
+            CsvRow.NewStatus,
             "duck",
             "noun",
             "/dʌk/",
@@ -79,9 +81,9 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
             "100.000000%",
             testTimestamp
           ),
-          SheetRow(
+          CsvRow(
             2,
-            SheetRow.NewStatus,
+            CsvRow.NewStatus,
             "peevish",
             "adjective",
             "ˈpiːvɪʃ",
@@ -103,9 +105,9 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
       assertDataFrameDataEquals(expected.toDF(), actual.toDF())
     }
 
-    it("Should publish should publish merged state if GoogleSheetsArea is not empty. ") {
+    it("Should publish should publish merged state if CsvPublishArea is not empty. ") {
       import spark.implicits._
-      val area = new GoogleSheetsArea(areaPath, testTimestampProvider)
+      val area = new CsvPublishArea(areaPath, testTimestampProvider)
       val testObj = Mockito.spy(area)
       val goldenSnapshot = spark.createDataset(
         Seq(
@@ -165,7 +167,7 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
 
       val publishedSheet = spark.createDataset(
         Seq(
-          SheetRow(
+          CsvRow(
             1,
             LearnedStatus,
             "duck",
@@ -184,7 +186,7 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
             "50.000000%",
             t"2019-01-01T01:01:01Z"
           ),
-          SheetRow(
+          CsvRow(
             2,
             InProgressStatus,
             "die hard",
@@ -203,9 +205,9 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
             "100.000000%",
             t"2019-01-01T01:01:01Z"
           ),
-          SheetRow(
+          CsvRow(
             4,
-            SheetRow.NewStatus,
+            CsvRow.NewStatus,
             "peevish",
             "adjective",
             "ˈpiːvɪʃ",
@@ -231,7 +233,7 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
       val actual = spark.table(area.fullTableName)
       val expected = spark.createDataset(
         Seq(
-          SheetRow(
+          CsvRow(
             1,
             LearnedStatus,
             "duck",
@@ -250,7 +252,7 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
             "50.000000%",
             testTimestamp
           ),
-          SheetRow(
+          CsvRow(
             2,
             InProgressStatus,
             "die hard",
@@ -269,9 +271,9 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
             "100.000000%",
             testTimestamp
           ),
-          SheetRow(
+          CsvRow(
             4,
-            SheetRow.NewStatus,
+            CsvRow.NewStatus,
             "peevish",
             "adjective",
             "ˈpiːvɪʃ",
@@ -288,9 +290,9 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
             "25.000000%",
             testTimestamp
           ),
-          SheetRow(
+          CsvRow(
             5,
-            SheetRow.NewStatus,
+            CsvRow.NewStatus,
             "diehard",
             "noun",
             "ˈdʌɪhɑːd",
@@ -315,7 +317,7 @@ class GoogleSheetAreaTest extends ApplicationManagedAreaTestBase {
     it("should create a single file per publish") {
       import spark.implicits._
       val nUnknownRecords = 1000
-      val area            = new GoogleSheetsArea(areaPath)
+      val area            = new CsvPublishArea(areaPath, () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant))
       val areaDir         = new Directory(new File(area.absoluteTablePath))
 
       val goldenSnapshot = spark

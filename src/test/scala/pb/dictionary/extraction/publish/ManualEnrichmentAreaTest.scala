@@ -6,6 +6,7 @@ import pb.dictionary.extraction.silver.DefinedText
 
 import java.io.File
 import java.sql.Timestamp
+import java.time.{ZonedDateTime, ZoneOffset}
 import scala.reflect.io.Directory
 
 class ManualEnrichmentAreaTest extends ApplicationManagedAreaTestBase {
@@ -258,7 +259,7 @@ class ManualEnrichmentAreaTest extends ApplicationManagedAreaTestBase {
     it("should create a single file per publish") {
       import spark.implicits._
       val nUnknownRecords = 1000
-      val area            = new ManualEnrichmentArea(areaPath)
+      val area            = new ManualEnrichmentArea(areaPath, () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant))
       val areaDir         = new Directory(new File(area.absoluteTablePath))
 
       val silverSnapshot = spark

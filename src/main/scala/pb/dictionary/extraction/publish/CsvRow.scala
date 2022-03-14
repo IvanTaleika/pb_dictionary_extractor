@@ -1,10 +1,8 @@
 package pb.dictionary.extraction.publish
 
-import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion}
-
 import java.sql.Timestamp
 
-case class SheetRow(
+case class CsvRow(
     id: Int,
     status: String, // new / in progress / learned
     normalizedText: String,
@@ -21,12 +19,11 @@ case class SheetRow(
     antonyms: String,
     translation: String,
     usage: String,
-    tags: String,
-    notes: String,
+    // CSV does not support timestamp - this is a partition column
     updatedAt: Timestamp,
 ) extends FinalPublishProduct
 
-object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
+object CsvRow extends FinalPublishProductProductCompanion[SheetRow] {
 
   val PART_OF_SPEECH = "partOfSpeech"
   val PHONETIC       = "phonetic"
@@ -71,3 +68,6 @@ object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
   val UsageDecimals    = 6
 
 }
+
+
+

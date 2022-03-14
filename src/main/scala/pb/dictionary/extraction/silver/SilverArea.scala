@@ -6,12 +6,11 @@ import pb.dictionary.extraction.{AreaUtils, DeltaArea}
 import pb.dictionary.extraction.bronze.CleansedText
 
 import java.sql.Timestamp
-import java.time.{ZonedDateTime, ZoneOffset}
 
 class SilverArea(
     path: String,
     definitionApi: WordDefinitionApi,
-    timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
+    timestampProvider: () => Timestamp
 ) extends DeltaArea[DefinedText](path) {
   import DefinedText._
   import spark.implicits._

@@ -7,11 +7,10 @@ import pb.dictionary.extraction.{AreaUtils, DeltaArea}
 import pb.dictionary.extraction.stage.HighlightedText
 
 import java.sql.Timestamp
-import java.time.{ZonedDateTime, ZoneOffset}
 
 class BronzeArea(
     path: String,
-    timestampProvider: () => Timestamp = () => Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
+    timestampProvider: () => Timestamp
 ) extends DeltaArea[CleansedText](path) {
   import CleansedText._
 
