@@ -1,25 +1,82 @@
 package pb.dictionary.extraction.publish
 
-import org.apache.spark.sql.{Column, Dataset}
+import com.google.api.services.drive.Drive
+import com.google.api.services.sheets.v4.Sheets
+import com.google.api.services.sheets.v4.model.{
+  BatchUpdateSpreadsheetRequest,
+  CellData,
+  DeleteSheetRequest,
+  DuplicateSheetRequest,
+  ExtendedValue,
+  GridRange,
+  Request,
+  RowData,
+  UpdateCellsRequest
+}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.CsvSnapshotsArea
+import org.apache.spark.sql.types.{IntegerType, TimestampType}
+import pb.dictionary.extraction.{Area, AreaUtils, CsvSnapshotsArea}
 import pb.dictionary.extraction.golden.DictionaryRecord
 import pb.dictionary.extraction.golden.DictionaryRecord._
+import pb.dictionary.extraction.GoogleQuickstart.nVocabularyBackupsToKeep
 
+import java.nio.file.Paths
+import scala.collection.JavaConverters._
+import java.net.URI
 import java.sql.Timestamp
-// We can also use Google API in foreach/map function https://developers.google.com/sheets/api/guides/values
-// or excel spark connector https://github.com/crealytics/spark-excel
+import java.time.format.DateTimeFormatter
+
 class GoogleSheetsArea(
-    path: String,
-    timestampProvider: () => Timestamp
-) extends CsvSnapshotsArea[SheetRow](path, timestampProvider) {
+    val path: String,
+    driveService: Drive,
+    spreadsheetsService: Sheets,
+    timestampProvider: () => Timestamp,
+    nBackupSheetsToKeep: Int = 5
+) extends Area[SheetRow] {
   import SheetRow._
   import spark.implicits._
+
+  private val NSheetLetterIndexes = 'Z' - 'A' + 1
+  private val lastSchemaIndex     = schema.size - 1
+  private val lastSheetIndex      = "A" * (lastSchemaIndex / NSheetLetterIndexes) + ('A' + lastSchemaIndex % NSheetLetterIndexes).toChar
+
+  private val parsedPath                                       = Paths.get(path)
+  private val sheetName                                        = parsedPath.getFileName.toString
+  private val backupSheetPrefix                                = s"${sheetName}_"
+  private val spreadsheetPath                                  = parsedPath.getParent
+  private val spreadsheetName                                  = spreadsheetPath.getFileName.toString
+  private val spreadsheetDirectory                             = spreadsheetPath.getParent.toString
+  private val (spreadsheetDirectoryId, spreadsheetId, sheetId) = connectToTheSpreadsheet()
+
   // FIXME: this will work badly with examples column
   private val arrayJoin = ", "
 
-  override protected def outputFiles = Option(1)
+  override def snapshot: Dataset[SheetRow] = {
+    val sheetDataRange = s"${sheetName}!A:${lastSheetIndex}"
+    val sheetData      = querySheetData(spreadsheetId, sheetDataRange)
+    val sheetHeader    = sheetData.head
+    val sheetValues    = sheetData.tail
+
+    logger.info(s"Fetched `${sheetValues.size}` rows of values.")
+
+    val expectedNames = schema.map(_.name)
+    val expectedTypes = schema.map(_.dataType)
+
+    if (sheetHeader != expectedNames) {
+      // TODO: error handling
+      throw new RuntimeException("Schema names do not match")
+    }
+
+    val castedData = sheetValues.map(_.zip(expectedTypes).map {
+      case (v: String, IntegerType)   => Integer.valueOf(v)
+      case (v: String, TimestampType) => Timestamp.valueOf(v)
+      case (v, _)                     => v
+    })
+
+    spark.createDataFrame(spark.sparkContext.parallelize(castedData.map(r => Row.fromSeq(r))), schema).as[SheetRow]
+  }
 
   /** Upsert records from lower tier area by PK and returns new records. */
   def upsert(previousSnapshot: Dataset[DictionaryRecord]): Dataset[SheetRow] = {
@@ -43,8 +100,9 @@ class GoogleSheetsArea(
     val biggestSnapshotId = snapshot.select(ID).as[Int].orderBy(col(ID).desc).head(1).headOption.getOrElse(0)
     val rnCol             = "rowNumber"
     val newSheet = mergedStates
-      // must run row_number after the join to exclude matched rows
-      .withColumn(rnCol, row_number().over(Window.partitionBy(ID).orderBy(colGolden(DictionaryRecord.FIRST_OCCURRENCE))))
+    // must run row_number after the join to exclude matched rows
+      .withColumn(rnCol,
+                  row_number().over(Window.partitionBy(ID).orderBy(colGolden(DictionaryRecord.FIRST_OCCURRENCE))))
       .select(
         // select by column type and meaning, but not final order
 
@@ -61,18 +119,21 @@ class GoogleSheetsArea(
         coalesce(colPublished(USAGE), concat(format_number(colGolden(USAGE) * 100, UsageDecimals), lit("%"))) as USAGE,
         // Attributes that can be updated from the device. Golden area values are in priority to reflect the latest attributes state
         coalesce(colGolden(OCCURRENCES), colPublished(OCCURRENCES)) as OCCURRENCES,
-        coalesce(timestampToCsvString(colGolden(FIRST_OCCURRENCE)), colPublished(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
-        coalesce(timestampToCsvString(colGolden(LATEST_OCCURRENCE)), colPublished(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
+        coalesce(AreaUtils.timestampToString(colGolden(FIRST_OCCURRENCE)), colPublished(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
+        coalesce(AreaUtils.timestampToString(colGolden(LATEST_OCCURRENCE)), colPublished(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
         // Arrays can be merged
         mergeArrayAttributes(colPublished(FORMS), colGolden(FORMS)) as FORMS,
         mergeArrayAttributes(colPublished(SOURCES), colGolden(BOOKS)) as SOURCES,
         mergeArrayAttributes(colPublished(EXAMPLES), colGolden(EXAMPLES)) as EXAMPLES,
         mergeArrayAttributes(colPublished(SYNONYMS), colGolden(SYNONYMS)) as SYNONYMS,
         mergeArrayAttributes(colPublished(ANTONYMS), colGolden(ANTONYMS)) as ANTONYMS,
+        // Non-existing Golden columns
+        colPublished(TAGS),
+        colPublished(NOTES)
       )
       // select by correct GoogleSheet order
       .select(attributesOrder.map(col): _*)
-    newSheet
+    newSheet.as[SheetRow]
   }
 
   private def mergeArrayAttributes(publishCol: Column, goldenCol: Column) = {
@@ -80,4 +141,145 @@ class GoogleSheetsArea(
     val goldenNotNullCol  = coalesce(goldenCol, lit(Array.empty[String]))
     array_join(array_union(publishNotNullCol, goldenNotNullCol), arrayJoin)
   }
+
+  private def write(df: Dataset[SheetRow]): Dataset[SheetRow] = {
+    logger.info(s"Creating requests for transactional backup and write on the spreadsheet `$path`")
+
+    val currentTimestamp   = timestampProvider()
+    val sheetNameTimestamp = currentTimestamp.toLocalDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss"))
+    val backupSheetName    = s"$backupSheetPrefix${sheetNameTimestamp}"
+
+    val existingSheets  = querySheetsProperties(spreadsheetId)
+    val nExistingSheets = existingSheets.size
+
+    val duplicateSheetRequest = new Request().setDuplicateSheet(
+      new DuplicateSheetRequest()
+        .setSourceSheetId(sheetId)
+        .setNewSheetName(backupSheetName)
+        .setInsertSheetIndex(nExistingSheets)
+    )
+    logger.info(s"Created sheet `$sheetName` duplicate request to a name `${backupSheetName}`")
+
+    val sheetsToDelete = existingSheets
+      .filter(_.getTitle.startsWith(backupSheetPrefix))
+      .sortBy(_.getTitle)(Ordering[String].reverse)
+      .drop(nBackupSheetsToKeep - 1)
+
+    val deleteSheetsRequests = sheetsToDelete
+      .map(_.getSheetId)
+      .map { obsoleteSheetId =>
+        new Request().setDeleteSheet(new DeleteSheetRequest().setSheetId(obsoleteSheetId))
+      }
+    logger.info(
+      s"Created requests for `${sheetsToDelete.map(_.getTitle).mkString(", ")}` sheets deletion" +
+        s" to keep at most `${nBackupSheetsToKeep}` backup sheets.")
+
+    val collectedDf = df.collect().toSeq
+
+    val sheetRowUpdates = collectedDf
+      .map(
+        sheetRow =>
+          sheetRow.productIterator
+            .collect {
+              case v: Int    => new ExtendedValue().setNumberValue(v)
+              case v: String => new ExtendedValue().setStringValue(v)
+            }
+            .map(v => new CellData().setUserEnteredValue(v))
+            .toSeq
+      )
+      .map(vs => new RowData().setValues(vs.asJava))
+      .asJava
+
+    val sheetUpdateRange = new GridRange()
+      .setSheetId(sheetId)
+      .setStartColumnIndex(0)
+      .setEndColumnIndex(schema.size)
+      .setStartRowIndex(1)
+
+    val updateDataRequest = new Request().setUpdateCells(
+      new UpdateCellsRequest().setRows(sheetRowUpdates).setRange(sheetUpdateRange).setFields("userEnteredValue")
+    )
+    logger.info(s"Created requests to update `${collectedDf.size}` rows of data in sheet `$path`.")
+
+    val transactionalRequests = Seq(duplicateSheetRequest, updateDataRequest) ++ deleteSheetsRequests
+    val batchUpdateRequestBody = new BatchUpdateSpreadsheetRequest()
+      .setRequests(transactionalRequests.asJava)
+      .setIncludeSpreadsheetInResponse(false)
+
+    logger.info(s"Running created requests in a single transactional update on a spreadsheet `${spreadsheetId}`")
+    spreadsheetsService.spreadsheets().batchUpdate(spreadsheetId, batchUpdateRequestBody).execute()
+    logger.info(s"Sheet `$path` is updated successfully.")
+
+    snapshot
+  }
+
+  private def connectToTheSpreadsheet() = {
+    val directoryId      = queryDirectoryId(spreadsheetDirectory)
+    val spreadsheetId    = querySpreadsheetId(spreadsheetName, directoryId)
+    val sheetsProperties = querySheetsProperties(spreadsheetId)
+    val sheetId          = sheetsProperties.find(_.getTitle == sheetName).map(_.getSheetId).get
+
+    (directoryId, spreadsheetId, sheetId)
+  }
+
+  private def queryDirectoryId(name: String) = {
+    logger.info(s"Querying for ID of the spreadsheet directory `$name`")
+    val directoryId = listDriveFiles()
+      .setQ(s"mimeType = 'application/vnd.google-apps.folder' and name = '$name'")
+      .setFields("files(id)")
+      .execute()
+      .getFiles
+      .asScala
+      .head
+      .getId
+    logger.info(s"Spreadsheet directory `$name` ID is `$directoryId`")
+    directoryId
+  }
+
+  private def querySpreadsheetId(name: String, directoryId: String) = {
+    logger.info(s"Querying for ID of the spreadsheet `${name}` from directory `$directoryId`")
+    val spreadsheetId = listDriveFiles()
+      .setQ(
+        s"mimeType='application/vnd.google-apps.spreadsheet' and " +
+          s"name = '$name' and " +
+          s"'${directoryId}' in parents")
+      .setFields("files(id)")
+      .execute()
+      .getFiles
+      .asScala
+      .head
+      .getId
+    logger.info(s"Spreadsheet `${name}` from directory `$directoryId` ID is `$spreadsheetId`")
+    spreadsheetId
+  }
+
+  private def querySheetsProperties(spreadsheetId: String) = {
+    logger.info(s"Querying for sheets the spreadsheet `${spreadsheetId}`")
+    spreadsheetsService
+      .spreadsheets()
+      .get(spreadsheetId)
+      .setIncludeGridData(false)
+      .execute()
+      .getSheets
+      .asScala
+      .map(_.getProperties)
+  }
+
+  private def querySheetData(spreadsheetId: String, range: String) = {
+    logger.info(s"Querying sheet `$range` data from the spreadsheet `$spreadsheetId`")
+
+    spreadsheetsService
+      .spreadsheets()
+      .values()
+      .get(spreadsheetId, range)
+      .setValueRenderOption("FORMATTED_VALUE")
+      .setDateTimeRenderOption("FORMATTED_STRING")
+      .setPrettyPrint(true)
+      .execute()
+      .getValues
+      .asScala
+      .map(_.asScala)
+  }
+
+  private def listDriveFiles() = driveService.files().list().setSpaces("drive")
 }

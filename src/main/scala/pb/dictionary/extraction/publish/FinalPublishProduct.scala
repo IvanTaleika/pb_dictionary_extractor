@@ -3,11 +3,12 @@ package pb.dictionary.extraction.publish
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.types.StructField
-import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion}
+import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion, ProductCompanion}
 
 import scala.reflect.runtime.universe.TypeTag
 
-trait FinalPublishProduct extends ApplicationManagedProduct {
+// TODO: remove extends ApplicationManagedProduct?
+trait FinalPublishProduct extends Product {
 
   def id: Int
   def normalizedText: String
@@ -16,15 +17,14 @@ trait FinalPublishProduct extends ApplicationManagedProduct {
 }
 
 object FinalPublishProduct {
-  val UPDATED_AT      = "updatedAt"
   val ID              = "id"
   val NORMALIZED_TEXT = "normalizedText"
   val DEFINITION      = "definition"
   val FORMS           = "forms"
 }
 
-abstract class FinalPublishProductProductCompanion[T <: ApplicationManagedProduct: TypeTag]
-    extends ApplicationManagedProductCompanion[T] {
+trait FinalPublishProductProductCompanion[T <: FinalPublishProduct]
+    extends ProductCompanion[T] {
 
   final val ID              = FinalPublishProduct.ID
   final val NORMALIZED_TEXT = FinalPublishProduct.NORMALIZED_TEXT

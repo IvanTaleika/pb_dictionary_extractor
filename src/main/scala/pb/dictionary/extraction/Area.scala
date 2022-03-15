@@ -14,7 +14,8 @@ abstract class Area[Out <: Product: TypeTag] {
   protected val logger   = Logger(getClass)
   protected val spark    = SparkSession.active
   val schema: StructType = Encoders.product[Out].schema
-
+  // TODO: add implicit object provider to ProductCompanion objects
+//implicitly[ProductCompanion[Out]].schema
   def path: String
   def snapshot: Dataset[Out]
 }
@@ -35,8 +36,6 @@ abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: TypeTag]
   logger.info(s"Initializing `$format` table `$databaseName`.`$tableName`.")
   initTable()
 
-//  /** Upsert records from lower tier area by PK and returns new records. */
-//  def upsert(previousSnapshot: Dataset[In]): Dataset[Out]
 
   protected def tableOptions    = Map.empty[String, String]
   protected def tablePartitions = Seq.empty[String]
@@ -53,18 +52,6 @@ abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: TypeTag]
     spark.sql(tableCreationStmt)
   }
 
-//  protected def findUpdates(previousSnapshot: Dataset[In]): Dataset[In] = {
-//    import spark.implicits._
-//    val condition = snapshot
-//      .select(col(UPDATED_AT))
-//      .as[Timestamp]
-//      .orderBy(col(UPDATED_AT).desc_nulls_last)
-//      .head(1)
-//      .headOption
-//      .map(col(UPDATED_AT) > _)
-//      .getOrElse(lit(true))
-//    previousSnapshot.where(condition)
-//  }
 
   override def snapshot: Dataset[Out] = {
     import spark.implicits._
@@ -119,7 +106,6 @@ abstract class CsvArea[Out <: ApplicationManagedProduct: TypeTag](path: String, 
     snapshot
   }
 
-  protected def timestampToCsvString(c: Column) = date_format(c, "yyyy-MM-dd HH:mm:ss")
 }
 
 abstract class CsvSnapshotsArea[Out <: ApplicationManagedProduct: TypeTag](path: String,

@@ -4,6 +4,7 @@ import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedPr
 
 import java.sql.Timestamp
 
+// TODO: return updatedAt as string? as timestamp?
 case class SheetRow(
     id: Int,
     status: String, // new / in progress / learned
@@ -23,7 +24,6 @@ case class SheetRow(
     usage: String,
     tags: String,
     notes: String,
-    updatedAt: Timestamp,
 ) extends FinalPublishProduct
 
 object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
@@ -43,8 +43,12 @@ object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
   val SYNONYMS          = "synonyms"
   val ANTONYMS          = "antonyms"
   val USAGE             = "usage"
+  val TAGS              = "tags"
+  val NOTES             = "notes"
   val enrichedAttributes: Seq[String] =
-    Seq(STATUS, SOURCES, FIRST_OCCURRENCE, LATEST_OCCURRENCE, EXAMPLES, SYNONYMS, ANTONYMS, USAGE)
+    Seq(STATUS, SOURCES, FIRST_OCCURRENCE, LATEST_OCCURRENCE, EXAMPLES, SYNONYMS, ANTONYMS, USAGE, TAGS, NOTES)
+
+  override def metadata: Seq[String] = Seq.empty
 
   val attributesOrder = Seq(
     ID,
@@ -62,12 +66,13 @@ object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
     SYNONYMS,
     ANTONYMS,
     TRANSLATION,
-    USAGE
+    USAGE,
+    TAGS,
+    NOTES
   )
 
   val NewStatus        = "new"
   val InProgressStatus = "in progress"
   val LearnedStatus    = "learned"
   val UsageDecimals    = 6
-
 }

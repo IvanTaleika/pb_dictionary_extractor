@@ -1,7 +1,7 @@
 package pb.dictionary.extraction
 
-import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.{Column, Dataset, SparkSession}
+import org.apache.spark.sql.functions.{col, date_format, lit}
 import pb.dictionary.extraction.ApplicationManagedProduct.UPDATED_AT
 
 import java.sql.Timestamp
@@ -22,4 +22,7 @@ object AreaUtils {
       .getOrElse(lit(true))
     snapshot.where(condition)
   }
+
+  def timestampToString(c: Column, format: String = "yyyy-MM-dd HH:mm:ss") = date_format(c, format)
+
 }

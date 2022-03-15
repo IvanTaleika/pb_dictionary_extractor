@@ -3,7 +3,7 @@ package pb.dictionary.extraction.publish
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import pb.dictionary.extraction.silver.DefinedText
-import pb.dictionary.extraction.CsvSnapshotsArea
+import pb.dictionary.extraction.{AreaUtils, CsvSnapshotsArea}
 
 import java.sql.Timestamp
 
@@ -30,8 +30,8 @@ class ManualEnrichmentArea(
         col(TEXT),
         col(OCCURRENCES),
         array_join(col(BOOKS), ", ") as BOOKS,
-        timestampToCsvString(col(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
-        timestampToCsvString(col(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
+        AreaUtils.timestampToString(col(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
+        AreaUtils.timestampToString(col(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
       )
   }
 

@@ -8,9 +8,15 @@ import com.google.api.services.sheets.v4.{Sheets, SheetsScopes}
 import com.google.api.services.sheets.v4.model.{
   BatchUpdateSpreadsheetRequest,
   BatchUpdateValuesRequest,
+  CellData,
   DeleteSheetRequest,
+  DuplicateSheetRequest,
+  ExtendedValue,
+  GridRange,
   Request,
+  RowData,
   SheetProperties,
+  UpdateCellsRequest,
   UpdateSheetPropertiesRequest,
   ValueRange
 }
@@ -64,10 +70,11 @@ object GoogleQuickstart {
     val spreadsheetName = "Vocabulary_dev"
     val sheetName       = "Main"
 
-    val driveService =
+    val driveService: Drive =
       new Drive.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials()).setApplicationName(APPLICATION_NAME).build
-    val spreadsheetsService =
+    val spreadsheetsService: Sheets =
       new Sheets.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials()).setApplicationName(APPLICATION_NAME).build
+    val spark = SparkSession.builder().appName("SheetsRead").master("local[*]").getOrCreate()
 
     def listRequest = driveService.files().list().setSpaces("drive")
 
@@ -99,31 +106,60 @@ object GoogleQuickstart {
     val startingSpreadsheetInfo = spreadsheetInfoRequest.execute()
     val startingSheetsInfo      = startingSpreadsheetInfo.getSheets.asScala.map(_.getProperties)
     val mainSheetId             = startingSheetsInfo.find(_.getTitle == "Main").map(_.getSheetId).get
+    val startingNSheets         = startingSheetsInfo.size
 
-    println("Cloning the main sheet to a new one")
+    println(s"Querying spreadsheet $vocabularySpreadsheetId")
 
-    import com.google.api.services.sheets.v4.model.CopySheetToAnotherSpreadsheetRequest
-    val copySheetBody = new CopySheetToAnotherSpreadsheetRequest
-    copySheetBody.setDestinationSpreadsheetId(vocabularySpreadsheetId)
+    val schema       = Encoders.product[SheetRow].schema
+    val schemaNames  = schema.map(_.name)
+    val types        = schema.map(_.dataType)
+    val lastColIndex = schema.size - 1
 
-    val copySheetRequest =
-      spreadsheetsService.spreadsheets.sheets.copyTo(vocabularySpreadsheetId, mainSheetId, copySheetBody)
-    val copySheetResult = copySheetRequest.execute()
-    val newSheetId      = copySheetResult.getSheetId
+    val lastColSheetIndex = "A" * (lastColIndex / nSheetIndexes) + ('A' + lastColIndex % nSheetIndexes).toChar
+    val sheetRange        = s"${sheetName}!A:${lastColSheetIndex}"
+
+    println(s"Reading values range ${sheetRange}")
+
+    val vocabularyValues =
+      spreadsheetsService
+        .spreadsheets()
+        .values()
+        .get(vocabularySpreadsheetId, sheetRange)
+        .setValueRenderOption("FORMATTED_VALUE")
+        .setDateTimeRenderOption("FORMATTED_STRING")
+        .setPrettyPrint(true)
+        .execute()
+
+    val sheetValues = vocabularyValues.getValues.asScala
+    val header      = sheetValues.head.asScala
+    val data        = sheetValues.tail
+
+    if (header != schemaNames) {
+      throw new RuntimeException("Schema names do not match")
+    }
+
+    val castedData = data.map(_.asScala.zip(types).map {
+      case (v: String, IntegerType)   => Integer.valueOf(v)
+      case (v: String, TimestampType) => Timestamp.valueOf(v)
+      case (v, _)                     => v
+    })
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(castedData.map(r => Row.fromSeq(r))), schema)
 
     println(
-      s"Renaming copied sheet and Clearing vocabulary spreadsheet to keep at most ${nVocabularyBackupsToKeep} backups")
-
+      s"Transactional main sheet backup, backup rename, " +
+        s"clearing vocabulary spreadsheet to keep at most ${nVocabularyBackupsToKeep} backups")
     val sheetNameDateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss")
     val newSheetTitle              = s"Main_${applicationStartTime.format(sheetNameDateTimeFormatter)}"
-    val renameSheetRequest = new Request().setUpdateSheetProperties(
-      new UpdateSheetPropertiesRequest()
-        .setProperties(
-          new SheetProperties().setSheetId(newSheetId).setTitle(newSheetTitle)
-        )
-        .setFields("title")
+
+    println("Duplicate sheet request")
+    val duplicateSheetRequest = new Request().setDuplicateSheet(
+      new DuplicateSheetRequest()
+        .setSourceSheetId(mainSheetId)
+        .setNewSheetName(newSheetTitle)
+        .setInsertSheetIndex(startingNSheets)
     )
 
+    println("Rename sheets requests")
     val deleteSheetsRequests = startingSheetsInfo
       .filter(_.getTitle.startsWith("Main_"))
       .sortBy(_.getTitle)(Ordering[String].reverse)
@@ -133,74 +169,48 @@ object GoogleQuickstart {
         new Request().setDeleteSheet(new DeleteSheetRequest().setSheetId(obsoleteSheetId))
       }
 
+    println("Update data")
+    val updatedDf = df
+      .withColumn("id", col("id") * 10)
+      .withColumn("updatedAt", date_format(col("updatedAt"), "yyyy-mm-dd HH:mm:dd"))
+      .select(schemaNames.map(col): _*)
+    val updatedData = updatedDf
+      .collect()
+      .map(
+        row =>
+          row.toSeq
+            .collect {
+              case v: Int    => new ExtendedValue().setNumberValue(v)
+              case v: String => new ExtendedValue().setStringValue(v)
+            }
+            .map(v => new CellData().setUserEnteredValue(v))
+      )
+      .map(vs => new RowData().setValues(vs.asJava))
+      .toSeq
+      .asJava
+//    val updateRange = s"$newSheetTitle!A2:$lastColSheetIndex"
+    val updateGridRange = new GridRange()
+      .setSheetId(mainSheetId)
+      .setStartColumnIndex(0)
+      .setEndColumnIndex(schema.size)
+      .setStartRowIndex(1)
+
+    val updateDataRequest = new Request().setUpdateCells(
+      new UpdateCellsRequest().setRows(updatedData).setRange(updateGridRange).setFields("userEnteredValue")
+    )
+
+    val transactionalRequests = Seq(duplicateSheetRequest, updateDataRequest) ++ deleteSheetsRequests
+
     val batchUpdateRequestBody =
       new BatchUpdateSpreadsheetRequest()
-        .setRequests((deleteSheetsRequests :+ renameSheetRequest).asJava)
+        .setRequests(transactionalRequests.asJava)
         .setIncludeSpreadsheetInResponse(false)
+
     val batchUpdateResponse =
       spreadsheetsService.spreadsheets().batchUpdate(vocabularySpreadsheetId, batchUpdateRequestBody).execute()
 
     println("Updated")
-    //    println(s"Querying spreadsheet $vocabularySpreadsheetId")
-//
-//    val schema       = Encoders.product[SheetRow].schema
-//    val schemaNames  = schema.map(_.name)
-//    val types        = schema.map(_.dataType)
-//    val lastColIndex = schema.size - 1
-//
-//    val lastColSheetIndex = "A" * (lastColIndex / nSheetIndexes) + ('A' + lastColIndex % nSheetIndexes).toChar
-//    val sheetRange        = s"${sheetName}!A:${lastColSheetIndex}"
-//
-//    println(s"Reading values range ${sheetRange}")
-//
-//    val vocabularyValues =
-//      spreadsheetsService
-//        .spreadsheets()
-//        .values()
-//        .get(vocabularySpreadsheetId, sheetRange)
-//        .setValueRenderOption("FORMATTED_VALUE")
-//        .setDateTimeRenderOption("FORMATTED_STRING")
-//        .setPrettyPrint(true)
-//        .execute()
-//
-//    val spark       = SparkSession.builder().appName("SheetsRead").master("local[*]").getOrCreate()
-//    val sheetValues = vocabularyValues.getValues.asScala
-//    val header      = sheetValues.head.asScala
-//    val data        = sheetValues.tail
-//
-//    if (header != schemaNames) {
-//      throw new RuntimeException("Schema names do not match")
-//    }
-//
-//    val castedData = data.map(_.asScala.zip(types).map {
-//      case (v: String, IntegerType)   => Integer.valueOf(v)
-//      case (v: String, TimestampType) => Timestamp.valueOf(v)
-//      case (v, _)                     => v
-//    })
-//    val df = spark.createDataFrame(spark.sparkContext.parallelize(castedData.map(r => Row.fromSeq(r))), schema)
-//
-//    val updatedDf = df
-//      .withColumn("id", col("id") * 10)
-//      .withColumn("updatedAt", date_format(col("updatedAt"), "yyyy-mm-dd HH:mm:dd"))
-//      .select(schemaNames.map(col): _*)
-//    val updatedData = updatedDf.collect().map(_.toSeq.map(_.asInstanceOf[AnyRef]).asJava).toSeq.asJava
-//    val updateBody  = new ValueRange().setValues(updatedData)
-//    val updateRange = s"UpdateTest!A2:$lastColSheetIndex"
-//
-//
-//
-//
-//
-//    val updateResult =
-//      spreadsheetsService
-//        .spreadsheets()
-//        .values()
-//        .update(vocabularySpreadsheetId, updateRange, updateBody)
-//        .setValueInputOption("USER_ENTERED")
-////        .setValueInputOption("RAW")
-//        .execute()
-//
-//    System.out.printf("%d cells updated.", updateResult.getUpdatedCells)
+
 
   }
 

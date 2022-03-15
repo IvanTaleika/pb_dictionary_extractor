@@ -3,7 +3,7 @@ package pb.dictionary.extraction.publish
 import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.CsvSnapshotsArea
+import pb.dictionary.extraction.{AreaUtils, CsvSnapshotsArea}
 import pb.dictionary.extraction.golden.DictionaryRecord
 import pb.dictionary.extraction.golden.DictionaryRecord._
 
@@ -62,8 +62,8 @@ class CsvPublishArea(
         coalesce(colPublished(USAGE), concat(format_number(colGolden(USAGE) * 100, UsageDecimals), lit("%"))) as USAGE,
         // Attributes that can be updated from the device. Golden area values are in priority to reflect the latest attributes state
         coalesce(colGolden(OCCURRENCES), colPublished(OCCURRENCES)) as OCCURRENCES,
-        coalesce(timestampToCsvString(colGolden(FIRST_OCCURRENCE)), colPublished(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
-        coalesce(timestampToCsvString(colGolden(LATEST_OCCURRENCE)), colPublished(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
+        coalesce(AreaUtils.timestampToString(colGolden(FIRST_OCCURRENCE)), colPublished(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
+        coalesce(AreaUtils.timestampToString(colGolden(LATEST_OCCURRENCE)), colPublished(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
         // Arrays can be merged
         mergeArrayAttributes(colPublished(FORMS), colGolden(FORMS)) as FORMS,
         mergeArrayAttributes(colPublished(SOURCES), colGolden(BOOKS)) as SOURCES,
