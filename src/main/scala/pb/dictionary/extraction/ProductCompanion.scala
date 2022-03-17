@@ -1,8 +1,9 @@
 package pb.dictionary.extraction
 
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{Column, Encoders}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{StructField, StructType}
+
 import scala.reflect.runtime.universe.TypeTag
 
 abstract class ProductCompanion[T <: Product: TypeTag] {

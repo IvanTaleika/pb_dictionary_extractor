@@ -24,5 +24,4 @@ object AreaUtils {
   }
 
   def timestampToString(c: Column, format: String = "yyyy-MM-dd HH:mm:ss") = date_format(c, format)
-
 }

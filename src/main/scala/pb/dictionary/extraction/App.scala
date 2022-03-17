@@ -27,13 +27,15 @@ object App {
   // -> extract as CSV (override???) -> send to google sheets ???
   // Q: will we be able to sort google sheet by the timestamp/book/usage index
   // Q: can we use https://books.google.com/ngrams/info for usage rating?
+  private val GOOGLE_CREDENTIALS_FILE_PATH = "conf/credentials/google_service.json"
 
-  protected[extraction] val SourceDbPath            = "D:/system/config/books.db"
-  protected[extraction] val StageAreaPath           = "dictionary/stage"
-  protected[extraction] val BronzeAreaPath          = "dictionary/bronze"
-  protected[extraction] val SilverAreaPath          = "dictionary/silver"
-  protected[extraction] val GoldenAreaPath          = "dictionary/golden"
-  protected[extraction] val GoogleSheetsPublishPath = "dictionary/googleSheets"
+  protected[extraction] val SourceDbPath    = "D:/system/config/books.db"
+  protected[extraction] val StageAreaPath   = "dictionary/stage"
+  protected[extraction] val BronzeAreaPath  = "dictionary/bronze"
+  protected[extraction] val SilverAreaPath  = "dictionary/silver"
+  protected[extraction] val GoldenAreaPath  = "dictionary/golden"
+  protected[extraction] val CsvPublishPath  = "dictionary/csvPublish"
+//  protected[extraction] val GoogleSheetPath = "English_dev/Vocabulary_dev/Main"
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
@@ -61,7 +63,7 @@ object App {
                        silverArea: SilverArea,
                        goldenArea: GoldenArea,
                        manualEnrichmentArea: ManualEnrichmentArea,
-                       publisher: CsvPublishArea) = {
+                       publisher: GoogleSheetsArea) = {
     // TODO: use meanegful names instead of upsert everywhere
     deviceHighlights.snapshot
       .transform(df => stageArea.upsert(df))
@@ -73,6 +75,13 @@ object App {
         val silverSnapshot = silverArea.snapshot
         manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
       }
+
+//    goldenArea.snapshot
+//      .transform(df => publisher.upsert(df))
+//      .transform { publishSnapshot =>
+//        val silverSnapshot = silverArea.snapshot
+//        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
+//      }
   }
 //  SparkSession.active.table("updateDictionary.silver").orderBy(org.apache.spark.sql.functions.col("occurrences").desc).show(false)
 }

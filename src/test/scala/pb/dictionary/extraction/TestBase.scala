@@ -26,6 +26,7 @@ abstract class TestBase
     with Matchers
     with MockFactory
     with DataFrameSuiteBase {
+  val appName          = "pb_dictionary_extractor_tests"
   val warehousePath    = "target/spark-warehouse"
   protected val logger = Logger(getClass)
 
@@ -39,7 +40,7 @@ abstract class TestBase
       .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
       // TODO: remove spark UI
       .set("spark.ui.enabled", "true")
-      .setAppName("pb_dictionary_extractor_tests")
+      .setAppName(appName)
 
   override def beforeAll(): Unit = {
     super.beforeAll()

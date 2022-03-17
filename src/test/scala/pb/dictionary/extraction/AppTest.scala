@@ -1,20 +1,18 @@
 package pb.dictionary.extraction
 
-import com.google.common.util.concurrent.RateLimiter
-import grizzled.slf4j.Logger
-import org.apache.spark.sql.{DataFrame, Encoders, Row}
-import org.apache.spark.sql.functions.lit
+import com.google.api.services.drive.{Drive, DriveScopes}
+import com.google.api.services.sheets.v4.{Sheets, SheetsScopes}
+import org.apache.spark.sql.Encoders
 import org.scalatest.tags.Slow
-import pb.dictionary.extraction.bronze.{BronzeArea, CleansedText}
+import pb.dictionary.extraction.bronze.BronzeArea
 import pb.dictionary.extraction.device.{DeviceHighlight, DeviceHighlightsDb}
 import pb.dictionary.extraction.golden._
-import pb.dictionary.extraction.publish.{CsvPublishArea, GoogleSheetsArea, ManualEnrichmentArea}
-import pb.dictionary.extraction.silver.{DictionaryApiDevEnricher, DictionaryApiDevParallelHttpEnricher, DictionaryApiDevWordDefiner, SilverArea}
+import pb.dictionary.extraction.publish.{GoogleServicesFactory, GoogleSheetsArea, ManualEnrichmentArea}
+import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
 import java.sql.Timestamp
 import java.time.{ZonedDateTime, ZoneOffset}
-import scala.collection.mutable.ArrayBuffer
 
 @Slow
 class AppTest extends TestBase {
@@ -34,13 +32,20 @@ class AppTest extends TestBase {
     it("should work") {
       val localSpark = spark
       import localSpark.implicits._
-      val stageAreaPath           = s"$testDir/stage"
-      val bronzeAreaPath          = s"$testDir/bronze"
-      val silverAreaPath          = s"$testDir/silver"
-      val goldenAreaPath          = s"$testDir/golden"
-      val manualEnrichmentPath    = s"$testDir/manual_enrichment"
-      val googleSheetsPublishPath = s"$testDir/publish"
-      val sampleFile              = this.getClass.getResource("deviceHighlightsSample.csv").getPath
+      val stageAreaPath        = s"$testDir/stage"
+      val bronzeAreaPath       = s"$testDir/bronze"
+      val silverAreaPath       = s"$testDir/silver"
+      val goldenAreaPath       = s"$testDir/golden"
+      val manualEnrichmentPath = s"$testDir/manual_enrichment"
+      val csvPublishPath       = s"$testDir/publish"
+      val googleSheetPath      = "English_dev/Vocabulary_dev/Main"
+
+      val CREDENTIALS_FILE_PATH = "conf/credentials/google_service.json"
+      val googleServicesFactory = new GoogleServicesFactory(appName, CREDENTIALS_FILE_PATH)
+      val driveService          = googleServicesFactory.create[Drive](DriveScopes.DRIVE_METADATA_READONLY)
+      val spreadsheetsService   = googleServicesFactory.create[Sheets](SheetsScopes.SPREADSHEETS)
+
+      val sampleFile = this.getClass.getResource("deviceHighlightsSample.csv").getPath
 
       val deviceHighlights      = stub[DeviceHighlightsDb]
       val deviceHighlightSchema = Encoders.product[DeviceHighlight].schema
@@ -53,7 +58,7 @@ class AppTest extends TestBase {
       val goldenArea =
         new GoldenArea(goldenAreaPath, new DummyDictionaryTranslator(), NgramUsageStatistics(), timestampProvider)
       val manualEnrichmentArea = new ManualEnrichmentArea(manualEnrichmentPath, timestampProvider)
-      val publish              = new CsvPublishArea(googleSheetsPublishPath, timestampProvider)
+      val publish              = new GoogleSheetsArea(googleSheetPath, driveService, spreadsheetsService, timestampProvider)
 
       val deviceHighlightsSample = spark.read
         .format("csv")
@@ -77,7 +82,7 @@ class AppTest extends TestBase {
         manualEnrichmentArea,
         publish
       )
-      Thread.sleep(1000000)
+//      Thread.sleep(1000000)
     }
   }
 }

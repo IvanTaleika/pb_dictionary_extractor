@@ -2,31 +2,19 @@ package pb.dictionary.extraction.publish
 
 import com.google.api.services.drive.Drive
 import com.google.api.services.sheets.v4.Sheets
-import com.google.api.services.sheets.v4.model.{
-  BatchUpdateSpreadsheetRequest,
-  CellData,
-  DeleteSheetRequest,
-  DuplicateSheetRequest,
-  ExtendedValue,
-  GridRange,
-  Request,
-  RowData,
-  UpdateCellsRequest
-}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import com.google.api.services.sheets.v4.model._
+import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, TimestampType}
-import pb.dictionary.extraction.{Area, AreaUtils, CsvSnapshotsArea}
+import pb.dictionary.extraction.{Area, AreaUtils}
 import pb.dictionary.extraction.golden.DictionaryRecord
 import pb.dictionary.extraction.golden.DictionaryRecord._
-import pb.dictionary.extraction.GoogleQuickstart.nVocabularyBackupsToKeep
 
 import java.nio.file.Paths
-import scala.collection.JavaConverters._
-import java.net.URI
 import java.sql.Timestamp
 import java.time.format.DateTimeFormatter
+import scala.collection.JavaConverters._
 
 class GoogleSheetsArea(
     val path: String,
@@ -53,7 +41,9 @@ class GoogleSheetsArea(
   // FIXME: this will work badly with examples column
   private val arrayJoin = ", "
 
-  override def snapshot: Dataset[SheetRow] = {
+  override def snapshot: Dataset[SheetRow] = buildSnapshot.cache()
+
+  private def buildSnapshot: Dataset[SheetRow] = {
     val sheetDataRange = s"${sheetName}!A:${lastSheetIndex}"
     val sheetData      = querySheetData(spreadsheetId, sheetDataRange)
     val sheetHeader    = sheetData.head
@@ -69,11 +59,17 @@ class GoogleSheetsArea(
       throw new RuntimeException("Schema names do not match")
     }
 
-    val castedData = sheetValues.map(_.zip(expectedTypes).map {
-      case (v: String, IntegerType)   => Integer.valueOf(v)
-      case (v: String, TimestampType) => Timestamp.valueOf(v)
-      case (v, _)                     => v
-    })
+    val castedData = sheetValues.map { row =>
+      if (row.size > schema.size) {
+        // TODO: error handling
+        throw new RuntimeException("Row size does not match")
+      }
+      row.padTo(schema.size, "").zip(expectedTypes).map {
+        case (v: String, IntegerType)   => Integer.valueOf(v)
+        case (v: String, TimestampType) => Timestamp.valueOf(v)
+        case (v, _)                     => v
+      }
+    }
 
     spark.createDataFrame(spark.sparkContext.parallelize(castedData.map(r => Row.fromSeq(r))), schema).as[SheetRow]
   }
@@ -81,136 +77,6 @@ class GoogleSheetsArea(
   /** Upsert records from lower tier area by PK and returns new records. */
   def upsert(previousSnapshot: Dataset[DictionaryRecord]): Dataset[SheetRow] = {
     previousSnapshot.transform(fromGolden).transform(write)
-  }
-
-  private def fromGolden(golden: Dataset[DictionaryRecord]) = {
-    val goldenAlias              = "golden"
-    val publishedAlias           = "published"
-    def colPublished(cn: String) = col(s"${publishedAlias}.${cn}")
-    def colGolden(cn: String)    = col(s"${goldenAlias}.${cn}")
-    val mergedStates = snapshot
-      .as(publishedAlias)
-      .join(golden.as(goldenAlias),
-            DictionaryRecord.pk.map(cn => colPublished(cn) === colGolden(cn)).reduce(_ && _),
-            "full_outer")
-    // for calculated columns `collect` and `max().over()` generate the same DAG, except for
-    // the last step where the value is either fetched to master or broadcasted. However, in case the column
-    // is already stored in parquet file, collect can efficiently fetch it using metadata, while WF issues
-    // shuffle and actual value search
-    val biggestSnapshotId = snapshot.select(ID).as[Int].orderBy(col(ID).desc).head(1).headOption.getOrElse(0)
-    val rnCol             = "rowNumber"
-    val newSheet = mergedStates
-    // must run row_number after the join to exclude matched rows
-      .withColumn(rnCol,
-                  row_number().over(Window.partitionBy(ID).orderBy(colGolden(DictionaryRecord.FIRST_OCCURRENCE))))
-      .select(
-        // select by column type and meaning, but not final order
-
-        // attributes, not present in Golden area must be selected from the Sheet if present
-        coalesce(colPublished(ID), col(rnCol) + lit(biggestSnapshotId)) as ID,
-        coalesce(colPublished(STATUS), lit(NewStatus)) as STATUS,
-        // Natural PK can be selected in any order
-        coalesce(colPublished(NORMALIZED_TEXT), colGolden(NORMALIZED_TEXT)) as NORMALIZED_TEXT,
-        coalesce(colPublished(DEFINITION), colGolden(DEFINITION)) as DEFINITION,
-        // string attributes may be fixed manually, Sheet data are in priority
-        coalesce(colPublished(PART_OF_SPEECH), colGolden(PART_OF_SPEECH)) as PART_OF_SPEECH,
-        coalesce(colPublished(PHONETIC), colGolden(PHONETIC)) as PHONETIC,
-        coalesce(colPublished(TRANSLATION), colGolden(TRANSLATION)) as TRANSLATION,
-        coalesce(colPublished(USAGE), concat(format_number(colGolden(USAGE) * 100, UsageDecimals), lit("%"))) as USAGE,
-        // Attributes that can be updated from the device. Golden area values are in priority to reflect the latest attributes state
-        coalesce(colGolden(OCCURRENCES), colPublished(OCCURRENCES)) as OCCURRENCES,
-        coalesce(AreaUtils.timestampToString(colGolden(FIRST_OCCURRENCE)), colPublished(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
-        coalesce(AreaUtils.timestampToString(colGolden(LATEST_OCCURRENCE)), colPublished(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
-        // Arrays can be merged
-        mergeArrayAttributes(colPublished(FORMS), colGolden(FORMS)) as FORMS,
-        mergeArrayAttributes(colPublished(SOURCES), colGolden(BOOKS)) as SOURCES,
-        mergeArrayAttributes(colPublished(EXAMPLES), colGolden(EXAMPLES)) as EXAMPLES,
-        mergeArrayAttributes(colPublished(SYNONYMS), colGolden(SYNONYMS)) as SYNONYMS,
-        mergeArrayAttributes(colPublished(ANTONYMS), colGolden(ANTONYMS)) as ANTONYMS,
-        // Non-existing Golden columns
-        colPublished(TAGS),
-        colPublished(NOTES)
-      )
-      // select by correct GoogleSheet order
-      .select(attributesOrder.map(col): _*)
-    newSheet.as[SheetRow]
-  }
-
-  private def mergeArrayAttributes(publishCol: Column, goldenCol: Column) = {
-    val publishNotNullCol = coalesce(split(publishCol, arrayJoin), lit(Array.empty[String]))
-    val goldenNotNullCol  = coalesce(goldenCol, lit(Array.empty[String]))
-    array_join(array_union(publishNotNullCol, goldenNotNullCol), arrayJoin)
-  }
-
-  private def write(df: Dataset[SheetRow]): Dataset[SheetRow] = {
-    logger.info(s"Creating requests for transactional backup and write on the spreadsheet `$path`")
-
-    val currentTimestamp   = timestampProvider()
-    val sheetNameTimestamp = currentTimestamp.toLocalDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss"))
-    val backupSheetName    = s"$backupSheetPrefix${sheetNameTimestamp}"
-
-    val existingSheets  = querySheetsProperties(spreadsheetId)
-    val nExistingSheets = existingSheets.size
-
-    val duplicateSheetRequest = new Request().setDuplicateSheet(
-      new DuplicateSheetRequest()
-        .setSourceSheetId(sheetId)
-        .setNewSheetName(backupSheetName)
-        .setInsertSheetIndex(nExistingSheets)
-    )
-    logger.info(s"Created sheet `$sheetName` duplicate request to a name `${backupSheetName}`")
-
-    val sheetsToDelete = existingSheets
-      .filter(_.getTitle.startsWith(backupSheetPrefix))
-      .sortBy(_.getTitle)(Ordering[String].reverse)
-      .drop(nBackupSheetsToKeep - 1)
-
-    val deleteSheetsRequests = sheetsToDelete
-      .map(_.getSheetId)
-      .map { obsoleteSheetId =>
-        new Request().setDeleteSheet(new DeleteSheetRequest().setSheetId(obsoleteSheetId))
-      }
-    logger.info(
-      s"Created requests for `${sheetsToDelete.map(_.getTitle).mkString(", ")}` sheets deletion" +
-        s" to keep at most `${nBackupSheetsToKeep}` backup sheets.")
-
-    val collectedDf = df.collect().toSeq
-
-    val sheetRowUpdates = collectedDf
-      .map(
-        sheetRow =>
-          sheetRow.productIterator
-            .collect {
-              case v: Int    => new ExtendedValue().setNumberValue(v)
-              case v: String => new ExtendedValue().setStringValue(v)
-            }
-            .map(v => new CellData().setUserEnteredValue(v))
-            .toSeq
-      )
-      .map(vs => new RowData().setValues(vs.asJava))
-      .asJava
-
-    val sheetUpdateRange = new GridRange()
-      .setSheetId(sheetId)
-      .setStartColumnIndex(0)
-      .setEndColumnIndex(schema.size)
-      .setStartRowIndex(1)
-
-    val updateDataRequest = new Request().setUpdateCells(
-      new UpdateCellsRequest().setRows(sheetRowUpdates).setRange(sheetUpdateRange).setFields("userEnteredValue")
-    )
-    logger.info(s"Created requests to update `${collectedDf.size}` rows of data in sheet `$path`.")
-
-    val transactionalRequests = Seq(duplicateSheetRequest, updateDataRequest) ++ deleteSheetsRequests
-    val batchUpdateRequestBody = new BatchUpdateSpreadsheetRequest()
-      .setRequests(transactionalRequests.asJava)
-      .setIncludeSpreadsheetInResponse(false)
-
-    logger.info(s"Running created requests in a single transactional update on a spreadsheet `${spreadsheetId}`")
-    spreadsheetsService.spreadsheets().batchUpdate(spreadsheetId, batchUpdateRequestBody).execute()
-    logger.info(s"Sheet `$path` is updated successfully.")
-
-    snapshot
   }
 
   private def connectToTheSpreadsheet() = {
@@ -282,4 +148,162 @@ class GoogleSheetsArea(
   }
 
   private def listDriveFiles() = driveService.files().list().setSpaces("drive")
+
+  private def fromGolden(golden: Dataset[DictionaryRecord]) = {
+    val goldenAlias              = "golden"
+    val publishedAlias           = "published"
+    def colPublished(cn: String) = col(s"${publishedAlias}.${cn}")
+    def colGolden(cn: String)    = col(s"${goldenAlias}.${cn}")
+    val mergedStates = snapshot
+      .as(publishedAlias)
+      .join(golden.as(goldenAlias),
+            DictionaryRecord.pk.map(cn => colPublished(cn) === colGolden(cn)).reduce(_ && _),
+            "full_outer")
+    // for calculated columns `collect` and `max().over()` generate the same DAG, except for
+    // the last step where the value is either fetched to master or broadcasted. However, in case the column
+    // is already stored in parquet file, collect can efficiently fetch it using metadata, while WF issues
+    // shuffle and actual value search
+    val biggestSnapshotId = snapshot.select(ID).as[Int].orderBy(col(ID).desc).head(1).headOption.getOrElse(0)
+    val rnCol             = "rowNumber"
+    val newSheet = mergedStates
+    // must run row_number after the join to exclude matched rows
+      .withColumn(rnCol,
+                  row_number().over(Window.partitionBy(ID).orderBy(colGolden(DictionaryRecord.FIRST_OCCURRENCE))))
+      .select(
+        // select by column type and meaning, but not final order
+
+        // attributes, not present in Golden area must be selected from the Sheet if present
+        coalesce(colPublished(ID), col(rnCol) + lit(biggestSnapshotId)) as ID,
+        coalesce(colPublished(STATUS), lit(NewStatus)) as STATUS,
+        // Natural PK can be selected in any order
+        coalesce(colPublished(NORMALIZED_TEXT), colGolden(NORMALIZED_TEXT)) as NORMALIZED_TEXT,
+        coalesce(colPublished(DEFINITION), colGolden(DEFINITION)) as DEFINITION,
+        // string attributes may be fixed manually, Sheet data are in priority
+        coalesceEmptyString(colPublished(PART_OF_SPEECH), colGolden(PART_OF_SPEECH)) as PART_OF_SPEECH,
+        coalesceEmptyString(colPublished(PHONETIC), colGolden(PHONETIC)) as PHONETIC,
+        coalesceEmptyString(colPublished(TRANSLATION), colGolden(TRANSLATION)) as TRANSLATION,
+        coalesceEmptyString(colPublished(USAGE), concat(format_number(colGolden(USAGE) * 100, UsageDecimals), lit("%"))) as USAGE,
+        // Attributes that can be updated from the device. Golden area values are in priority to reflect the latest attributes state
+        coalesce(colGolden(OCCURRENCES), colPublished(OCCURRENCES), lit(1)) as OCCURRENCES,
+        coalesceEmptyString(AreaUtils.timestampToString(colGolden(FIRST_OCCURRENCE)), colPublished(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
+        coalesceEmptyString(AreaUtils.timestampToString(colGolden(LATEST_OCCURRENCE)), colPublished(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
+        // Arrays can be merged
+        coalesceEmptyString(mergeArrayAttributes(colPublished(FORMS), colGolden(FORMS))) as FORMS,
+        coalesceEmptyString(mergeArrayAttributes(colPublished(SOURCES), colGolden(BOOKS))) as SOURCES,
+        coalesceEmptyString(mergeArrayAttributes(colPublished(EXAMPLES), colGolden(EXAMPLES))) as EXAMPLES,
+        coalesceEmptyString(mergeArrayAttributes(colPublished(SYNONYMS), colGolden(SYNONYMS))) as SYNONYMS,
+        coalesceEmptyString(mergeArrayAttributes(colPublished(ANTONYMS), colGolden(ANTONYMS))) as ANTONYMS,
+        // Non-existing Golden columns
+        coalesceEmptyString(colPublished(TAGS)) as TAGS,
+        coalesceEmptyString(colPublished(NOTES)) as NOTES
+      )
+      // select by correct GoogleSheet order
+      .select(attributesOrder.map(col): _*)
+    newSheet.as[SheetRow]
+  }
+
+  private def coalesceEmptyString(cols: Column*) = {
+    coalesce((cols :+ lit("")): _*)
+  }
+
+  private def mergeArrayAttributes(publishCol: Column, goldenCol: Column) = {
+    val publishNotNullCol = coalesce(split(publishCol, arrayJoin), lit(Array.empty[String]))
+    val goldenNotNullCol  = coalesce(goldenCol, lit(Array.empty[String]))
+    array_join(array_union(publishNotNullCol, goldenNotNullCol), arrayJoin)
+  }
+
+  private def write(df: Dataset[SheetRow]): Dataset[SheetRow] = {
+    logger.info(s"Creating requests for transactional backup and write on the spreadsheet `$path`")
+
+    val currentTimestamp   = timestampProvider()
+    val sheetNameTimestamp = currentTimestamp.toLocalDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss"))
+    val backupSheetName    = s"$backupSheetPrefix${sheetNameTimestamp}"
+
+    val existingSheets  = querySheetsProperties(spreadsheetId)
+    val nExistingSheets = existingSheets.size
+
+    val backupSheetRequests   = createBackupSheetRequests(backupSheetName, nExistingSheets)
+    val deleteSheetsRequests  = createDeleteObsoleteBackupsRequests(existingSheets)
+    val expandSheetRequests   = createExpandSheetRequests(df)
+    val updateDataRequests    = createDataUpdateRequests(df)
+    val transactionalRequests = backupSheetRequests ++ expandSheetRequests ++ updateDataRequests ++ deleteSheetsRequests
+
+    val batchUpdateRequestBody = new BatchUpdateSpreadsheetRequest()
+      .setRequests(transactionalRequests.asJava)
+      .setIncludeSpreadsheetInResponse(false)
+
+    logger.info(s"Running created requests in a single transactional update on a spreadsheet `${spreadsheetId}`")
+    spreadsheetsService.spreadsheets().batchUpdate(spreadsheetId, batchUpdateRequestBody).execute()
+    logger.info(s"Sheet `$path` is updated successfully.")
+
+    // TODO: check if DF is recalculated only after the update
+    buildSnapshot.unpersist()
+  }
+
+  private def createBackupSheetRequests(backupSheetName: String, nExistingSheets: Int) = {
+    val backupSheetRequest = new Request().setDuplicateSheet(
+      new DuplicateSheetRequest()
+        .setSourceSheetId(sheetId)
+        .setNewSheetName(backupSheetName)
+        .setInsertSheetIndex(nExistingSheets)
+    )
+    logger.info(s"Created sheet `$sheetName` duplicate request to a name `${backupSheetName}`")
+    Seq(backupSheetRequest)
+  }
+
+  private def createDeleteObsoleteBackupsRequests(existingSheets: Seq[SheetProperties]) = {
+    val sheetsToDelete = existingSheets
+      .filter(_.getTitle.startsWith(backupSheetPrefix))
+      .sortBy(_.getTitle)(Ordering[String].reverse)
+      .drop(nBackupSheetsToKeep - 1)
+
+    val deleteSheetsRequests = sheetsToDelete
+      .map(_.getSheetId)
+      .map { obsoleteSheetId =>
+        new Request().setDeleteSheet(new DeleteSheetRequest().setSheetId(obsoleteSheetId))
+      }
+    logger.info(
+      s"Created requests for `${sheetsToDelete.map(_.getTitle).mkString(", ")}` sheets deletion" +
+        s" to keep at most `${nBackupSheetsToKeep}` backup sheets.")
+    deleteSheetsRequests
+  }
+
+  private def createExpandSheetRequests(df: Dataset[SheetRow]) = {
+    val nAppendRows = (df.count() - snapshot.count()).toInt
+    val appendRowsRequest = new Request().setAppendDimension(
+      new AppendDimensionRequest().setSheetId(sheetId).setDimension("ROWS").setLength(nAppendRows)
+    )
+    Seq(appendRowsRequest)
+  }
+
+  private def createDataUpdateRequests(df: Dataset[SheetRow]) = {
+    val collectedDf = df.collect().toSeq
+
+    val sheetRowUpdates = collectedDf
+      .sortBy(_.id)
+      .map(
+        sheetRow =>
+          sheetRow.productIterator
+            .collect {
+              case v: Int    => new ExtendedValue().setNumberValue(v)
+              case v: String => new ExtendedValue().setStringValue(v)
+            }
+            .map(v => new CellData().setUserEnteredValue(v))
+            .toSeq
+      )
+      .map(vs => new RowData().setValues(vs.asJava))
+      .asJava
+
+    val sheetUpdateRange = new GridRange()
+      .setSheetId(sheetId)
+      .setStartColumnIndex(0)
+      .setEndColumnIndex(schema.size)
+      .setStartRowIndex(1)
+
+    val updateDataRequest = new Request().setUpdateCells(
+      new UpdateCellsRequest().setRows(sheetRowUpdates).setRange(sheetUpdateRange).setFields("userEnteredValue")
+    )
+    logger.info(s"Created requests to update `${collectedDf.size}` rows of data in sheet `$path`.")
+    Seq(updateDataRequest)
+  }
 }

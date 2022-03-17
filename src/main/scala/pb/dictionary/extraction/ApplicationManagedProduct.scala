@@ -1,7 +1,6 @@
 package pb.dictionary.extraction
 
 import java.sql.Timestamp
-import scala.reflect.runtime.universe.TypeTag
 
 trait ApplicationManagedProduct extends Product {
 
