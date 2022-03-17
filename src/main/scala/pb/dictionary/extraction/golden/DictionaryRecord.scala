@@ -23,6 +23,8 @@ case class DictionaryRecord(
 ) extends ApplicationManagedProduct
 
 object DictionaryRecord extends ApplicationManagedProductCompanion[DictionaryRecord] {
+  implicit val goldenAreaDescriptor: this.type = this
+
   // silver
   val NORMALIZED_TEXT = "normalizedText"
   val DEFINITION      = "definition"

@@ -10,6 +10,7 @@ abstract class ProductCompanion[T <: Product: TypeTag] {
 
   def schema: StructType = Encoders.product[T].schema
 
+  // TODO: do we need all this column types for unmanaged area structure?
   def pk: Seq[String]
   def propagatingAttributes: Seq[String]
   def enrichedAttributes: Seq[String]
@@ -29,5 +30,10 @@ abstract class ProductCompanion[T <: Product: TypeTag] {
     val searchSchema = schema.map(dt => dt.name -> dt).toMap
     (cn: String) =>
       searchSchema(cn)
+  }
+
+  object implicits {
+    // Adding type to this value fails the build ¯\_(ツ)_/¯
+    implicit val areaTypeTag = implicitly[TypeTag[T]]
   }
 }

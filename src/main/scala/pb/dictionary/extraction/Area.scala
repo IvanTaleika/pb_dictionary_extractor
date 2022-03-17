@@ -2,20 +2,18 @@ package pb.dictionary.extraction
 
 import grizzled.slf4j.Logger
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.date_format
 import org.apache.spark.sql.types.StructType
 import pb.dictionary.extraction.ApplicationManagedProduct._
 
 import java.io.File
 import scala.reflect.io.Directory
-import scala.reflect.runtime.universe.TypeTag
 
-abstract class Area[Out <: Product: TypeTag] {
+abstract class Area[Out <: Product: ProductCompanion] {
   protected val logger   = Logger(getClass)
   protected val spark    = SparkSession.active
-  val schema: StructType = Encoders.product[Out].schema
-  // TODO: add implicit object provider to ProductCompanion objects
-//implicitly[ProductCompanion[Out]].schema
+  val areaDescriptor     = implicitly[ProductCompanion[Out]]
+  val schema: StructType = areaDescriptor.schema
+
   def path: String
   def snapshot: Dataset[Out]
 }
@@ -25,7 +23,9 @@ import org.apache.spark.sql.functions.{col, lit}
 import java.nio.file.Paths
 import java.sql.Timestamp
 
-abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: TypeTag](val path: String, val format: String)
+abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](
+    val path: String,
+    val format: String)
     extends Area[Out] {
   protected val absoluteTableLocation = Paths.get(path).toAbsolutePath
   val absoluteTablePath               = absoluteTableLocation.toUri.getPath
@@ -35,7 +35,6 @@ abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: TypeTag]
   val fullTableName                   = s"$databaseName.$tableName"
   logger.info(s"Initializing `$format` table `$databaseName`.`$tableName`.")
   initTable()
-
 
   protected def tableOptions    = Map.empty[String, String]
   protected def tablePartitions = Seq.empty[String]
@@ -52,16 +51,17 @@ abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: TypeTag]
     spark.sql(tableCreationStmt)
   }
 
-
   override def snapshot: Dataset[Out] = {
+    import areaDescriptor.implicits._
     import spark.implicits._
+
     spark.table(fullTableName).as[Out]
   }
 }
 
 import io.delta.tables.DeltaTable
 
-abstract class DeltaArea[Out <: ApplicationManagedProduct: TypeTag](path: String)
+abstract class DeltaArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](path: String)
     extends ApplicationManagedArea[Out](path, "delta") {
   protected def deltaTable                                   = DeltaTable.forPath(absoluteTablePath)
   protected def stagingAlias                                 = "staging"
@@ -70,7 +70,9 @@ abstract class DeltaArea[Out <: ApplicationManagedProduct: TypeTag](path: String
   protected def colStaged(cn: String)                        = colFromTable(stagingAlias)(cn)
 }
 
-abstract class CsvArea[Out <: ApplicationManagedProduct: TypeTag](path: String, timestampProvider: () => Timestamp)
+abstract class CsvArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](
+    path: String,
+    timestampProvider: () => Timestamp)
     extends ApplicationManagedArea[Out](path, "csv") {
 
   protected def outputFiles: Option[Int] = Option.empty
@@ -108,8 +110,9 @@ abstract class CsvArea[Out <: ApplicationManagedProduct: TypeTag](path: String, 
 
 }
 
-abstract class CsvSnapshotsArea[Out <: ApplicationManagedProduct: TypeTag](path: String,
-                                                                           timestampProvider: () => Timestamp)
+abstract class CsvSnapshotsArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](
+    path: String,
+    timestampProvider: () => Timestamp)
     extends CsvArea[Out](path, timestampProvider) {
 
   override def snapshot: Dataset[Out] = {
@@ -120,4 +123,4 @@ abstract class CsvSnapshotsArea[Out <: ApplicationManagedProduct: TypeTag](path:
   }
 }
 
-
+case class InvalidAreaStateException(message: String, cause: Throwable = null) extends PbDictionaryException(message, cause)

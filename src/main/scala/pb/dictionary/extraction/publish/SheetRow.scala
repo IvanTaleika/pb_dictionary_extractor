@@ -1,9 +1,5 @@
 package pb.dictionary.extraction.publish
 
-import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion}
-
-import java.sql.Timestamp
-
 // TODO: return updatedAt as string? as timestamp?
 case class SheetRow(
     id: Int,
@@ -27,6 +23,7 @@ case class SheetRow(
 ) extends FinalPublishProduct
 
 object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
+  implicit val googleSheetsAreaDescriptor: this.type = this
 
   val PART_OF_SPEECH = "partOfSpeech"
   val PHONETIC       = "phonetic"

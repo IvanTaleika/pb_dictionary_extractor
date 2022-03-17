@@ -14,6 +14,8 @@ case class HighlightedText(
 ) extends ApplicationManagedProduct
 
 object HighlightedText extends ApplicationManagedProductCompanion[HighlightedText] {
+  implicit val stageAreaDescriptor: this.type = this
+
   val OID             = "oid"
   val pk: Seq[String] = Seq(OID)
 

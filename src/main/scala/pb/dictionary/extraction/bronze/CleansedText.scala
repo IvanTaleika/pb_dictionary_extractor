@@ -14,6 +14,8 @@ case class CleansedText(
 ) extends ApplicationManagedProduct
 
 object CleansedText extends ApplicationManagedProductCompanion[CleansedText] {
+  implicit val bronzeAreaDescriptor: this.type = this
+
   val TEXT            = "text"
   val pk: Seq[String] = Seq(TEXT)
 

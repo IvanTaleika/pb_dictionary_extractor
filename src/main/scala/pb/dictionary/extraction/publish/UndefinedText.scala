@@ -13,7 +13,9 @@ case class UndefinedText(
     updatedAt: Timestamp
 ) extends ApplicationManagedProduct
 
-object UndefinedText extends ApplicationManagedProductCompanion[ApplicationManagedProduct] {
+object UndefinedText extends ApplicationManagedProductCompanion[UndefinedText] {
+  implicit val manualEnrichmentAreaDescriptor: this.type = this
+
   val TEXT            = "text"
   val pk: Seq[String] = Seq(TEXT)
 

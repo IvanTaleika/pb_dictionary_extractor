@@ -21,6 +21,7 @@ case class DefinedText(
 ) extends ApplicationManagedProduct
 
 object DefinedText extends ApplicationManagedProductCompanion[DefinedText] {
+  implicit val silverAreaDescriptor: this.type = this
 
   val TEXT = "text"
   val pk   = Seq(TEXT)

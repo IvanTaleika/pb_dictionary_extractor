@@ -26,6 +26,7 @@ case class CsvRow(
 ) extends FinalPublishProduct with ApplicationManagedProduct
 
 object CsvRow extends FinalPublishProductProductCompanion[CsvRow] with ApplicationManagedProductCompanion[CsvRow] {
+  implicit val csvPublishAreaDescriptor: this.type = this
 
   val PART_OF_SPEECH = "partOfSpeech"
   val PHONETIC       = "phonetic"

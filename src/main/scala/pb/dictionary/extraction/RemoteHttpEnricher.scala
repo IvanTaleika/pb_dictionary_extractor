@@ -140,7 +140,5 @@ class RemoteHttpDfEnricher[In, Out](enricherSummoner: Option[Double] => RemoteHt
   }
 }
 
-case class RemoteHttpEnrichmentException(message: String, cause: Throwable) extends Exception(message, cause)
-object RemoteHttpEnrichmentException {
-  def apply(message: String) = new RemoteHttpEnrichmentException(message, null)
-}
+case class RemoteHttpEnrichmentException(message: String, cause: Throwable = null)
+    extends PbDictionaryException(message, cause)

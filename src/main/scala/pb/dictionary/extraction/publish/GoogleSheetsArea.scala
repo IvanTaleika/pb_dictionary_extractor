@@ -6,8 +6,8 @@ import com.google.api.services.sheets.v4.model._
 import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, TimestampType}
-import pb.dictionary.extraction.{Area, AreaUtils}
+import org.apache.spark.sql.types.{IntegerType, StructType, TimestampType}
+import pb.dictionary.extraction.{Area, AreaUtils, InvalidAreaStateException, ProductCompanion}
 import pb.dictionary.extraction.golden.DictionaryRecord
 import pb.dictionary.extraction.golden.DictionaryRecord._
 
@@ -55,20 +55,24 @@ class GoogleSheetsArea(
     val expectedTypes = schema.map(_.dataType)
 
     if (sheetHeader != expectedNames) {
-      // TODO: error handling
-      throw new RuntimeException("Schema names do not match")
+      throw InvalidAreaStateException(s"Header `${sheetHeader
+        .mkString(", ")}` does not match expected schema names `${expectedNames
+        .mkString(", ")}` in the vocabulary Google sheet `${path}` ")
     }
 
-    val castedData = sheetValues.map { row =>
-      if (row.size > schema.size) {
-        // TODO: error handling
-        throw new RuntimeException("Row size does not match")
-      }
-      row.padTo(schema.size, "").zip(expectedTypes).map {
-        case (v: String, IntegerType)   => Integer.valueOf(v)
-        case (v: String, TimestampType) => Timestamp.valueOf(v)
-        case (v, _)                     => v
-      }
+    val castedData = sheetValues.zipWithIndex.map {
+      case (row, i) =>
+        if (row.size > schema.size) {
+          throw InvalidAreaStateException(
+            s"Row `${i + 1}` has unexpected number of columns `${row.size}` " +
+              s"that is more than expected schema size `${schema.size}` " +
+              s"in the vocabulary Google sheet `${path}`.")
+        }
+        row.padTo(schema.size, "").zip(expectedTypes).map {
+          case (v: String, IntegerType)   => Integer.valueOf(v)
+          case (v: String, TimestampType) => Timestamp.valueOf(v)
+          case (v, _)                     => v
+        }
     }
 
     spark.createDataFrame(spark.sparkContext.parallelize(castedData.map(r => Row.fromSeq(r))), schema).as[SheetRow]
