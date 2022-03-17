@@ -270,10 +270,14 @@ class GoogleSheetsArea(
 
   private def createExpandSheetRequests(df: Dataset[SheetRow]) = {
     val nAppendRows = (df.count() - snapshot.count()).toInt
-    val appendRowsRequest = new Request().setAppendDimension(
-      new AppendDimensionRequest().setSheetId(sheetId).setDimension("ROWS").setLength(nAppendRows)
-    )
-    Seq(appendRowsRequest)
+    if (nAppendRows > 0) {
+      val appendRowsRequest = new Request().setAppendDimension(
+        new AppendDimensionRequest().setSheetId(sheetId).setDimension("ROWS").setLength(nAppendRows)
+      )
+      Seq(appendRowsRequest)
+    } else {
+      Seq.empty
+    }
   }
 
   private def createDataUpdateRequests(df: Dataset[SheetRow]) = {
