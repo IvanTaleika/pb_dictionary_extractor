@@ -14,6 +14,7 @@ import pb.dictionary.extraction.golden.DictionaryRecord._
 import java.nio.file.Paths
 import java.sql.Timestamp
 import java.time.format.DateTimeFormatter
+import java.util.regex.Pattern
 import scala.collection.JavaConverters._
 
 class GoogleSheetsArea(
@@ -38,12 +39,9 @@ class GoogleSheetsArea(
   private val spreadsheetDirectory                             = spreadsheetPath.getParent.toString
   private val (spreadsheetDirectoryId, spreadsheetId, sheetId) = connectToTheSpreadsheet()
 
-  // FIXME: this will work badly with examples column
-  private val arrayJoin = ", "
+  protected val arrayRecordsSeparator = "\n* "
 
-  override def snapshot: Dataset[SheetRow] = buildSnapshot.cache()
-
-  private def buildSnapshot: Dataset[SheetRow] = {
+  override def snapshot: Dataset[SheetRow] = {
     val sheetDataRange = s"${sheetName}!A:${lastSheetIndex}"
     val sheetData      = querySheetData(spreadsheetId, sheetDataRange)
     val sheetHeader    = sheetData.head
@@ -80,7 +78,8 @@ class GoogleSheetsArea(
 
   /** Upsert records from lower tier area by PK and returns new records. */
   def upsert(previousSnapshot: Dataset[DictionaryRecord]): Dataset[SheetRow] = {
-    previousSnapshot.transform(fromGolden).transform(write)
+    val preUpsertSnapshot = snapshot.cache()
+    previousSnapshot.transform(fromGolden(preUpsertSnapshot)).transform(write(preUpsertSnapshot))
   }
 
   private def connectToTheSpreadsheet() = {
@@ -153,12 +152,13 @@ class GoogleSheetsArea(
 
   private def listDriveFiles() = driveService.files().list().setSpaces("drive")
 
-  private def fromGolden(golden: Dataset[DictionaryRecord]) = {
+  private def fromGolden(preUpsertSnapshot: Dataset[SheetRow])(golden: Dataset[DictionaryRecord]) = {
     val goldenAlias              = "golden"
     val publishedAlias           = "published"
     def colPublished(cn: String) = col(s"${publishedAlias}.${cn}")
     def colGolden(cn: String)    = col(s"${goldenAlias}.${cn}")
-    val mergedStates = snapshot
+
+    val mergedStates = preUpsertSnapshot
       .as(publishedAlias)
       .join(golden.as(goldenAlias),
             DictionaryRecord.pk.map(cn => colPublished(cn) === colGolden(cn)).reduce(_ && _),
@@ -167,7 +167,7 @@ class GoogleSheetsArea(
     // the last step where the value is either fetched to master or broadcasted. However, in case the column
     // is already stored in parquet file, collect can efficiently fetch it using metadata, while WF issues
     // shuffle and actual value search
-    val biggestSnapshotId = snapshot.select(ID).as[Int].orderBy(col(ID).desc).head(1).headOption.getOrElse(0)
+    val biggestSnapshotId = preUpsertSnapshot.select(ID).as[Int].orderBy(col(ID).desc).head(1).headOption.getOrElse(0)
     val rnCol             = "rowNumber"
     val newSheet = mergedStates
     // must run row_number after the join to exclude matched rows
@@ -202,7 +202,7 @@ class GoogleSheetsArea(
         coalesceEmptyString(colPublished(NOTES)) as NOTES
       )
       // select by correct GoogleSheet order
-      .select(attributesOrder.map(col): _*)
+      .select(columnsOrder.map(col): _*)
     newSheet.as[SheetRow]
   }
 
@@ -211,12 +211,13 @@ class GoogleSheetsArea(
   }
 
   private def mergeArrayAttributes(publishCol: Column, goldenCol: Column) = {
-    val publishNotNullCol = coalesce(split(publishCol, arrayJoin), lit(Array.empty[String]))
-    val goldenNotNullCol  = coalesce(goldenCol, lit(Array.empty[String]))
-    array_join(array_union(publishNotNullCol, goldenNotNullCol), arrayJoin)
-  }
+    val splitPattern = Pattern.quote(arrayRecordsSeparator)
 
-  private def write(df: Dataset[SheetRow]): Dataset[SheetRow] = {
+    val publishNotNullCol = coalesce(split(publishCol, splitPattern), lit(Array.empty[String]))
+    val goldenNotNullCol  = coalesce(goldenCol, lit(Array.empty[String]))
+    array_join(array_union(publishNotNullCol, goldenNotNullCol), arrayRecordsSeparator)
+  }
+  private def write(preUpsertSnapshot: Dataset[SheetRow])(postUpsertSnapshot: Dataset[SheetRow]): Dataset[SheetRow] = {
     logger.info(s"Creating requests for transactional backup and write on the spreadsheet `$path`")
 
     val currentTimestamp   = timestampProvider()
@@ -228,8 +229,8 @@ class GoogleSheetsArea(
 
     val backupSheetRequests   = createBackupSheetRequests(backupSheetName, nExistingSheets)
     val deleteSheetsRequests  = createDeleteObsoleteBackupsRequests(existingSheets)
-    val expandSheetRequests   = createExpandSheetRequests(df)
-    val updateDataRequests    = createDataUpdateRequests(df)
+    val expandSheetRequests   = createExpandSheetRequests(preUpsertSnapshot)(postUpsertSnapshot)
+    val updateDataRequests    = createDataUpdateRequests(postUpsertSnapshot)
     val transactionalRequests = backupSheetRequests ++ expandSheetRequests ++ updateDataRequests ++ deleteSheetsRequests
 
     val batchUpdateRequestBody = new BatchUpdateSpreadsheetRequest()
@@ -240,8 +241,7 @@ class GoogleSheetsArea(
     spreadsheetsService.spreadsheets().batchUpdate(spreadsheetId, batchUpdateRequestBody).execute()
     logger.info(s"Sheet `$path` is updated successfully.")
 
-    // TODO: check if DF is recalculated only after the update
-    buildSnapshot.unpersist()
+    snapshot
   }
 
   private def createBackupSheetRequests(backupSheetName: String, nExistingSheets: Int) = {
@@ -272,8 +272,8 @@ class GoogleSheetsArea(
     deleteSheetsRequests
   }
 
-  private def createExpandSheetRequests(df: Dataset[SheetRow]) = {
-    val nAppendRows = (df.count() - snapshot.count()).toInt
+  private def createExpandSheetRequests(preUpsertSnapshot: Dataset[SheetRow])(postUpsertSnapshot: Dataset[SheetRow]) = {
+    val nAppendRows = (postUpsertSnapshot.count() - preUpsertSnapshot.count()).toInt
     if (nAppendRows > 0) {
       val appendRowsRequest = new Request().setAppendDimension(
         new AppendDimensionRequest().setSheetId(sheetId).setDimension("ROWS").setLength(nAppendRows)

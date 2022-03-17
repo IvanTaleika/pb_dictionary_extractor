@@ -3,11 +3,8 @@ package pb.dictionary.extraction.publish
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.types.StructField
-import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion, ProductCompanion}
+import pb.dictionary.extraction.ProductCompanion
 
-import scala.reflect.runtime.universe.TypeTag
-
-// TODO: remove extends ApplicationManagedProduct?
 trait FinalPublishProduct extends Product {
 
   def id: Int

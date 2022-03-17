@@ -5,8 +5,8 @@ import org.apache.spark.sql.SparkSession
 import pb.dictionary.extraction.bronze.BronzeArea
 import pb.dictionary.extraction.device.DeviceHighlightsDb
 import pb.dictionary.extraction.golden.GoldenArea
-import pb.dictionary.extraction.publish.{CsvPublishArea, GoogleSheetsArea, ManualEnrichmentArea}
-import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
+import pb.dictionary.extraction.publish.{GoogleSheetsArea, ManualEnrichmentArea}
+import pb.dictionary.extraction.silver.SilverArea
 import pb.dictionary.extraction.stage.StageArea
 
 object App {

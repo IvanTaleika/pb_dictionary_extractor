@@ -1,5 +1,9 @@
 package pb.dictionary.extraction
 
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.StructField
+
 import java.sql.Timestamp
 
 trait ApplicationManagedProduct extends Product {
@@ -13,6 +17,17 @@ object ApplicationManagedProduct {
 
 trait ApplicationManagedProductCompanion[T <: ApplicationManagedProduct] extends ProductCompanion[T] {
 
-  final val UPDATED_AT   = ApplicationManagedProduct.UPDATED_AT
-  def metadata: Seq[String] = Seq(UPDATED_AT)
+  def propagatingAttributes: Seq[String]
+  def enrichedAttributes: Seq[String]
+
+  final val UPDATED_AT = ApplicationManagedProduct.UPDATED_AT
+
+  def metadata: Seq[String]   = Seq(UPDATED_AT)
+  def attributes: Seq[String] = propagatingAttributes ++ enrichedAttributes
+
+  def propagatingAttributesCols: Seq[Column] = propagatingAttributes.map(col)
+  def enrichedAttributesCols: Seq[Column]    = enrichedAttributes.map(col)
+
+  def propagatingAttributesFields: Seq[StructField] = propagatingAttributes.map(colParameters)
+  def enrichedAttributesFields: Seq[StructField]    = enrichedAttributes.map(colParameters)
 }

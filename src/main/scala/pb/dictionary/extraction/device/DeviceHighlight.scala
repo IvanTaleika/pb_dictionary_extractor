@@ -36,7 +36,6 @@ object DeviceHighlight extends ProductCompanion[DeviceHighlight] {
   }
 
   override val pk: Seq[String] = Seq(OID)
-  override val propagatingAttributes: Seq[String] = Seq.empty
-  override val enrichedAttributes: Seq[String] = Seq(VAL, TITLE, AUTHORS, TIME_EDT)
+  override val attributes: Seq[String] = Seq(VAL, TITLE, AUTHORS, TIME_EDT)
   override val metadata: Seq[String] = Seq.empty
 }
