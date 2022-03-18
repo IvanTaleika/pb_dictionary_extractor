@@ -7,7 +7,7 @@ import org.scalatest.tags.Slow
 import pb.dictionary.extraction.bronze.BronzeArea
 import pb.dictionary.extraction.device.{DeviceHighlight, DeviceHighlightsDb}
 import pb.dictionary.extraction.golden._
-import pb.dictionary.extraction.publish.{GoogleServicesFactory, GoogleSheetsArea, ManualEnrichmentArea}
+import pb.dictionary.extraction.publish.sheets.{GoogleServicesFactory, SheetsManualEnrichmentArea, SheetsPublishArea}
 import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
@@ -17,7 +17,8 @@ import java.time.{ZonedDateTime, ZoneOffset}
 @Slow
 class AppTest extends TestBase {
 
-  val testDir = "target/AppTest/updateDictionary"
+  val testDir         = "target/AppTest/updateDictionary"
+  val testSpreadsheet = "English_dev/Vocabulary_dev"
 //
 //  override def beforeAll(): Unit = {
 //    super.beforeAll()
@@ -32,13 +33,12 @@ class AppTest extends TestBase {
     it("should work") {
       val localSpark = spark
       import localSpark.implicits._
-      val stageAreaPath        = s"$testDir/stage"
-      val bronzeAreaPath       = s"$testDir/bronze"
-      val silverAreaPath       = s"$testDir/silver"
-      val goldenAreaPath       = s"$testDir/golden"
-      val manualEnrichmentPath = s"$testDir/manual_enrichment"
-      val csvPublishPath       = s"$testDir/publish"
-      val googleSheetPath      = "English_dev/Vocabulary_dev/Main"
+      val stageAreaPath             = s"$testDir/stage"
+      val bronzeAreaPath            = s"$testDir/bronze"
+      val silverAreaPath            = s"$testDir/silver"
+      val goldenAreaPath            = s"$testDir/golden"
+      val manualEnrichmentSheetPath = s"$testSpreadsheet/Manual"
+      val vocabularySheetPath       = s"$testSpreadsheet/Main"
 
       val CREDENTIALS_FILE_PATH = "conf/credentials/google_service.json"
       val googleServicesFactory = new GoogleServicesFactory(appName, CREDENTIALS_FILE_PATH)
@@ -57,8 +57,9 @@ class AppTest extends TestBase {
       val silverArea = new SilverArea(silverAreaPath, DictionaryApiDevWordDefiner(), timestampProvider)
       val goldenArea =
         new GoldenArea(goldenAreaPath, new DummyDictionaryTranslator(), NgramUsageStatistics(), timestampProvider)
-      val manualEnrichmentArea = new ManualEnrichmentArea(manualEnrichmentPath, timestampProvider)
-      val publish              = new GoogleSheetsArea(googleSheetPath, driveService, spreadsheetsService, timestampProvider)
+      val manualEnrichmentArea =
+        new SheetsManualEnrichmentArea(manualEnrichmentSheetPath, driveService, spreadsheetsService, timestampProvider)
+      val publish = new SheetsPublishArea(vocabularySheetPath, driveService, spreadsheetsService, timestampProvider)
 
       val deviceHighlightsSample = spark.read
         .format("csv")

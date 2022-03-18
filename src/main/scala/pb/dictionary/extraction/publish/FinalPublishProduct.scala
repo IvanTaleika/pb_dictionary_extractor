@@ -20,7 +20,7 @@ object FinalPublishProduct {
   val FORMS           = "forms"
 }
 
-trait FinalPublishProductProductCompanion[T <: FinalPublishProduct]
+trait FinalPublishProductCompanion[T <: FinalPublishProduct]
     extends ProductCompanion[T] {
 
   final val ID              = FinalPublishProduct.ID

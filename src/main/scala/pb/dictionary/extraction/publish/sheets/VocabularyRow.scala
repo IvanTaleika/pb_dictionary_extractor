@@ -1,6 +1,8 @@
-package pb.dictionary.extraction.publish
+package pb.dictionary.extraction.publish.sheets
 
-case class SheetRow(
+import pb.dictionary.extraction.publish.{FinalPublishProduct, FinalPublishProductCompanion}
+
+case class VocabularyRow(
     id: Int,
     status: String, // new / in progress / learned
     normalizedText: String,
@@ -21,7 +23,7 @@ case class SheetRow(
     notes: String,
 ) extends FinalPublishProduct
 
-object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
+object VocabularyRow extends FinalPublishProductCompanion[VocabularyRow] {
   implicit val googleSheetsAreaDescriptor: this.type = this
 
   val PART_OF_SPEECH    = "partOfSpeech"
@@ -61,27 +63,6 @@ object SheetRow extends FinalPublishProductProductCompanion[SheetRow] {
     )
 
   val metadata: Seq[String] = Seq.empty
-
-  val columnsOrder = Seq(
-    ID,
-    STATUS,
-    NORMALIZED_TEXT,
-    PART_OF_SPEECH,
-    PHONETIC,
-    FORMS,
-    SOURCES,
-    OCCURRENCES,
-    FIRST_OCCURRENCE,
-    LATEST_OCCURRENCE,
-    DEFINITION,
-    EXAMPLES,
-    SYNONYMS,
-    ANTONYMS,
-    TRANSLATION,
-    USAGE,
-    TAGS,
-    NOTES
-  )
 
   val NewStatus        = "new"
   val InProgressStatus = "in progress"

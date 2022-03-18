@@ -5,7 +5,7 @@ import org.apache.spark.sql.SparkSession
 import pb.dictionary.extraction.bronze.BronzeArea
 import pb.dictionary.extraction.device.DeviceHighlightsDb
 import pb.dictionary.extraction.golden.GoldenArea
-import pb.dictionary.extraction.publish.{GoogleSheetsArea, ManualEnrichmentArea}
+import pb.dictionary.extraction.publish.sheets.{SheetsManualEnrichmentArea, SheetsPublishArea}
 import pb.dictionary.extraction.silver.SilverArea
 import pb.dictionary.extraction.stage.StageArea
 
@@ -62,26 +62,26 @@ object App {
                        bronze: BronzeArea,
                        silverArea: SilverArea,
                        goldenArea: GoldenArea,
-                       manualEnrichmentArea: ManualEnrichmentArea,
-                       publisher: GoogleSheetsArea) = {
+                       manualEnrichmentArea: SheetsManualEnrichmentArea,
+                       publisher: SheetsPublishArea) = {
     // TODO: use meanegful names instead of upsert everywhere
-    deviceHighlights.snapshot
-      .transform(df => stageArea.upsert(df))
-      .transform(df => bronze.upsert(df))
-      .transform(df => silverArea.upsert(df))
-      .transform(df => goldenArea.upsert(df))
-      .transform(df => publisher.upsert(df))
-      .transform { publishSnapshot =>
-        val silverSnapshot = silverArea.snapshot
-        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
-      }
-
-//    goldenArea.snapshot
+//    deviceHighlights.snapshot
+//      .transform(df => stageArea.upsert(df))
+//      .transform(df => bronze.upsert(df))
+//      .transform(df => silverArea.upsert(df))
+//      .transform(df => goldenArea.upsert(df))
 //      .transform(df => publisher.upsert(df))
 //      .transform { publishSnapshot =>
 //        val silverSnapshot = silverArea.snapshot
 //        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
 //      }
+
+    goldenArea.snapshot
+      .transform(df => publisher.upsert(df))
+      .transform { publishSnapshot =>
+        val silverSnapshot = silverArea.snapshot
+        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
+      }
   }
 //  SparkSession.active.table("updateDictionary.silver").orderBy(org.apache.spark.sql.functions.col("occurrences").desc).show(false)
 }

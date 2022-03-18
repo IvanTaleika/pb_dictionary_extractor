@@ -1,47 +1,41 @@
-package pb.dictionary.extraction.publish
+package pb.dictionary.extraction.publish.sheets
 
 import com.google.api.services.drive.Drive
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.model._
-import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, StructType, TimestampType}
-import pb.dictionary.extraction.{Area, AreaUtils, InvalidAreaStateException, ProductCompanion}
-import pb.dictionary.extraction.golden.DictionaryRecord
-import pb.dictionary.extraction.golden.DictionaryRecord._
+import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.types.{IntegerType, TimestampType}
+import pb.dictionary.extraction.{Area, InvalidAreaStateException, ProductCompanion}
 
 import java.nio.file.Paths
 import java.sql.Timestamp
 import java.time.format.DateTimeFormatter
-import java.util.regex.Pattern
 import scala.collection.JavaConverters._
 
-class GoogleSheetsArea(
-    val path: String,
-    driveService: Drive,
-    spreadsheetsService: Sheets,
-    timestampProvider: () => Timestamp,
-    nBackupSheetsToKeep: Int = 5
-) extends Area[SheetRow] {
-  import SheetRow._
+abstract class GoogleSheetsArea[Out <: Product: ProductCompanion] extends Area[Out] {
   import spark.implicits._
+  import areaDescriptor.implicits._
 
-  private val NSheetLetterIndexes = 'Z' - 'A' + 1
-  private val lastSchemaIndex     = schema.size - 1
-  private val lastSheetIndex      = "A" * (lastSchemaIndex / NSheetLetterIndexes) + ('A' + lastSchemaIndex % NSheetLetterIndexes).toChar
+  protected def driveService: Drive
+  protected def spreadsheetsService: Sheets
+  protected def timestampProvider: () => Timestamp
+  protected def nBackupSheetsToKeep: Int
 
-  private val parsedPath                                       = Paths.get(path)
-  private val sheetName                                        = parsedPath.getFileName.toString
-  private val backupSheetPrefix                                = s"${sheetName}_"
-  private val spreadsheetPath                                  = parsedPath.getParent
-  private val spreadsheetName                                  = spreadsheetPath.getFileName.toString
-  private val spreadsheetDirectory                             = spreadsheetPath.getParent.toString
-  private val (spreadsheetDirectoryId, spreadsheetId, sheetId) = connectToTheSpreadsheet()
+  protected val NSheetLetterIndexes = 'Z' - 'A' + 1
+  protected val lastSheetIndex = {
+    val lastSchemaIndex = schema.size - 1
+    "A" * (lastSchemaIndex / NSheetLetterIndexes) + ('A' + lastSchemaIndex % NSheetLetterIndexes).toChar
+  }
 
-  protected val arrayRecordsSeparator = "\n* "
+  private val parsedPath                                         = Paths.get(path)
+  protected val sheetName                                        = parsedPath.getFileName.toString
+  protected val backupSheetPrefix                                = s"${sheetName}_"
+  protected val spreadsheetPath                                  = parsedPath.getParent
+  protected val spreadsheetName                                  = spreadsheetPath.getFileName.toString
+  protected val spreadsheetDirectory                             = spreadsheetPath.getParent.toString
+  protected val (spreadsheetDirectoryId, spreadsheetId, sheetId) = connectToTheSpreadsheet()
 
-  override def snapshot: Dataset[SheetRow] = {
+  override def snapshot: Dataset[Out] = {
     val sheetDataRange = s"${sheetName}!A:${lastSheetIndex}"
     val sheetData      = querySheetData(spreadsheetId, sheetDataRange)
     val sheetHeader    = sheetData.head
@@ -73,13 +67,7 @@ class GoogleSheetsArea(
         }
     }
 
-    spark.createDataFrame(spark.sparkContext.parallelize(castedData.map(r => Row.fromSeq(r))), schema).as[SheetRow]
-  }
-
-  /** Upsert records from lower tier area by PK and returns new records. */
-  def upsert(previousSnapshot: Dataset[DictionaryRecord]): Dataset[SheetRow] = {
-    val preUpsertSnapshot = snapshot.cache()
-    previousSnapshot.transform(fromGolden(preUpsertSnapshot)).transform(write(preUpsertSnapshot))
+    spark.createDataFrame(spark.sparkContext.parallelize(castedData.map(r => Row.fromSeq(r))), schema).as[Out]
   }
 
   private def connectToTheSpreadsheet() = {
@@ -152,72 +140,12 @@ class GoogleSheetsArea(
 
   private def listDriveFiles() = driveService.files().list().setSpaces("drive")
 
-  private def fromGolden(preUpsertSnapshot: Dataset[SheetRow])(golden: Dataset[DictionaryRecord]) = {
-    val goldenAlias              = "golden"
-    val publishedAlias           = "published"
-    def colPublished(cn: String) = col(s"${publishedAlias}.${cn}")
-    def colGolden(cn: String)    = col(s"${goldenAlias}.${cn}")
-
-    val mergedStates = preUpsertSnapshot
-      .as(publishedAlias)
-      .join(golden.as(goldenAlias),
-            DictionaryRecord.pk.map(cn => colPublished(cn) === colGolden(cn)).reduce(_ && _),
-            "full_outer")
-    // for calculated columns `collect` and `max().over()` generate the same DAG, except for
-    // the last step where the value is either fetched to master or broadcasted. However, in case the column
-    // is already stored in parquet file, collect can efficiently fetch it using metadata, while WF issues
-    // shuffle and actual value search
-    val biggestSnapshotId = preUpsertSnapshot.select(ID).as[Int].orderBy(col(ID).desc).head(1).headOption.getOrElse(0)
-    val rnCol             = "rowNumber"
-    val newSheet = mergedStates
-    // must run row_number after the join to exclude matched rows
-      .withColumn(rnCol,
-                  row_number().over(Window.partitionBy(ID).orderBy(colGolden(DictionaryRecord.FIRST_OCCURRENCE))))
-      .select(
-        // select by column type and meaning, but not final order
-
-        // attributes, not present in Golden area must be selected from the Sheet if present
-        coalesce(colPublished(ID), col(rnCol) + lit(biggestSnapshotId)) as ID,
-        coalesce(colPublished(STATUS), lit(NewStatus)) as STATUS,
-        // Natural PK can be selected in any order
-        coalesce(colPublished(NORMALIZED_TEXT), colGolden(NORMALIZED_TEXT)) as NORMALIZED_TEXT,
-        coalesce(colPublished(DEFINITION), colGolden(DEFINITION)) as DEFINITION,
-        // string attributes may be fixed manually, Sheet data are in priority
-        coalesceEmptyString(colPublished(PART_OF_SPEECH), colGolden(PART_OF_SPEECH)) as PART_OF_SPEECH,
-        coalesceEmptyString(colPublished(PHONETIC), colGolden(PHONETIC)) as PHONETIC,
-        coalesceEmptyString(colPublished(TRANSLATION), colGolden(TRANSLATION)) as TRANSLATION,
-        coalesceEmptyString(colPublished(USAGE), concat(format_number(colGolden(USAGE) * 100, UsageDecimals), lit("%"))) as USAGE,
-        // Attributes that can be updated from the device. Golden area values are in priority to reflect the latest attributes state
-        coalesce(colGolden(OCCURRENCES), colPublished(OCCURRENCES), lit(1)) as OCCURRENCES,
-        coalesceEmptyString(AreaUtils.timestampToString(colGolden(FIRST_OCCURRENCE)), colPublished(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
-        coalesceEmptyString(AreaUtils.timestampToString(colGolden(LATEST_OCCURRENCE)), colPublished(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
-        // Arrays can be merged
-        coalesceEmptyString(mergeArrayAttributes(colPublished(FORMS), colGolden(FORMS))) as FORMS,
-        coalesceEmptyString(mergeArrayAttributes(colPublished(SOURCES), colGolden(BOOKS))) as SOURCES,
-        coalesceEmptyString(mergeArrayAttributes(colPublished(EXAMPLES), colGolden(EXAMPLES))) as EXAMPLES,
-        coalesceEmptyString(mergeArrayAttributes(colPublished(SYNONYMS), colGolden(SYNONYMS))) as SYNONYMS,
-        coalesceEmptyString(mergeArrayAttributes(colPublished(ANTONYMS), colGolden(ANTONYMS))) as ANTONYMS,
-        // Non-existing Golden columns
-        coalesceEmptyString(colPublished(TAGS)) as TAGS,
-        coalesceEmptyString(colPublished(NOTES)) as NOTES
-      )
-      // select by correct GoogleSheet order
-      .select(columnsOrder.map(col): _*)
-    newSheet.as[SheetRow]
+  protected def write(preUpsertSnapshot: Dataset[Out], postUpsertSnapshot: Dataset[Out]): Dataset[Out] = {
+    // DF can be transformed to DS regarding the column order. Collected DS is always in the same order as its Product type
+    write(preUpsertSnapshot, postUpsertSnapshot.collect().toSeq)
   }
 
-  private def coalesceEmptyString(cols: Column*) = {
-    coalesce((cols :+ lit("")): _*)
-  }
-
-  private def mergeArrayAttributes(publishCol: Column, goldenCol: Column) = {
-    val splitPattern = Pattern.quote(arrayRecordsSeparator)
-
-    val publishNotNullCol = coalesce(split(publishCol, splitPattern), lit(Array.empty[String]))
-    val goldenNotNullCol  = coalesce(goldenCol, lit(Array.empty[String]))
-    array_join(array_union(publishNotNullCol, goldenNotNullCol), arrayRecordsSeparator)
-  }
-  private def write(preUpsertSnapshot: Dataset[SheetRow])(postUpsertSnapshot: Dataset[SheetRow]): Dataset[SheetRow] = {
+  protected def write(preUpsertSnapshot: Dataset[Out], postUpsertSnapshot: Seq[Out]): Dataset[Out] = {
     logger.info(s"Creating requests for transactional backup and write on the spreadsheet `$path`")
 
     val currentTimestamp   = timestampProvider()
@@ -272,8 +200,8 @@ class GoogleSheetsArea(
     deleteSheetsRequests
   }
 
-  private def createExpandSheetRequests(preUpsertSnapshot: Dataset[SheetRow])(postUpsertSnapshot: Dataset[SheetRow]) = {
-    val nAppendRows = (postUpsertSnapshot.count() - preUpsertSnapshot.count()).toInt
+  private def createExpandSheetRequests(preUpsertSnapshot: Dataset[Out])(postUpsertSnapshot: Seq[Out]) = {
+    val nAppendRows = (postUpsertSnapshot.size - preUpsertSnapshot.count()).toInt
     if (nAppendRows > 0) {
       val appendRowsRequest = new Request().setAppendDimension(
         new AppendDimensionRequest().setSheetId(sheetId).setDimension("ROWS").setLength(nAppendRows)
@@ -284,11 +212,8 @@ class GoogleSheetsArea(
     }
   }
 
-  private def createDataUpdateRequests(df: Dataset[SheetRow]) = {
-    val collectedDf = df.collect().toSeq
-
-    val sheetRowUpdates = collectedDf
-      .sortBy(_.id)
+  private def createDataUpdateRequests(postUpsertSnapshot: Seq[Out]) = {
+    val sheetRowUpdates = postUpsertSnapshot
       .map(
         sheetRow =>
           sheetRow.productIterator
@@ -311,7 +236,7 @@ class GoogleSheetsArea(
     val updateDataRequest = new Request().setUpdateCells(
       new UpdateCellsRequest().setRows(sheetRowUpdates).setRange(sheetUpdateRange).setFields("userEnteredValue")
     )
-    logger.info(s"Created requests to update `${collectedDf.size}` rows of data in sheet `$path`.")
+    logger.info(s"Created requests to update `${postUpsertSnapshot.size}` rows of data in sheet `$path`.")
     Seq(updateDataRequest)
   }
 }

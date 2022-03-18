@@ -1,4 +1,4 @@
-package pb.dictionary.extraction.publish
+package pb.dictionary.extraction.publish.sheets
 
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.services.json.AbstractGoogleJsonClient
