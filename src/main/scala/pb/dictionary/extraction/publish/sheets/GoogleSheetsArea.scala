@@ -148,14 +148,10 @@ abstract class GoogleSheetsArea[Out <: Product: ProductCompanion] extends Area[O
   protected def write(preUpsertSnapshot: Dataset[Out], postUpsertSnapshot: Seq[Out]): Dataset[Out] = {
     logger.info(s"Creating requests for transactional backup and write on the spreadsheet `$path`")
 
-    val currentTimestamp   = timestampProvider()
-    val sheetNameTimestamp = currentTimestamp.toLocalDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss"))
-    val backupSheetName    = s"$backupSheetPrefix${sheetNameTimestamp}"
-
     val existingSheets  = querySheetsProperties(spreadsheetId)
     val nExistingSheets = existingSheets.size
 
-    val backupSheetRequests   = createBackupSheetRequests(backupSheetName, nExistingSheets)
+    val backupSheetRequests   = createBackupSheetRequests(nExistingSheets)
     val deleteSheetsRequests  = createDeleteObsoleteBackupsRequests(existingSheets)
     val expandSheetRequests   = createExpandSheetRequests(preUpsertSnapshot)(postUpsertSnapshot)
     val updateDataRequests    = createDataUpdateRequests(postUpsertSnapshot)
@@ -172,15 +168,24 @@ abstract class GoogleSheetsArea[Out <: Product: ProductCompanion] extends Area[O
     snapshot
   }
 
-  private def createBackupSheetRequests(backupSheetName: String, nExistingSheets: Int) = {
-    val backupSheetRequest = new Request().setDuplicateSheet(
-      new DuplicateSheetRequest()
-        .setSourceSheetId(sheetId)
-        .setNewSheetName(backupSheetName)
-        .setInsertSheetIndex(nExistingSheets)
-    )
-    logger.info(s"Created sheet `$sheetName` duplicate request to a name `${backupSheetName}`")
-    Seq(backupSheetRequest)
+  private def createBackupSheetRequests(nExistingSheets: Int) = {
+    if(nBackupSheetsToKeep > 0) {
+      val currentTimestamp = timestampProvider()
+      val sheetNameTimestamp = currentTimestamp.toLocalDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss"))
+      val backupSheetName = s"$backupSheetPrefix${sheetNameTimestamp}"
+
+      val backupSheetRequest = new Request().setDuplicateSheet(
+        new DuplicateSheetRequest()
+          .setSourceSheetId(sheetId)
+          .setNewSheetName(backupSheetName)
+          .setInsertSheetIndex(nExistingSheets)
+      )
+      logger.info(s"Created sheet `$sheetName` duplicate request to a name `${backupSheetName}`.")
+      Seq(backupSheetRequest)
+    } else {
+      logger.info(s"Backup for sheet `${sheetName}` is turned off.")
+      Seq.empty
+    }
   }
 
   private def createDeleteObsoleteBackupsRequests(existingSheets: Seq[SheetProperties]) = {
