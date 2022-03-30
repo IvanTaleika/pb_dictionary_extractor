@@ -9,24 +9,11 @@ import pb.dictionary.extraction.publish.sheets.{SheetsManualEnrichmentArea, Shee
 import pb.dictionary.extraction.silver.SilverArea
 import pb.dictionary.extraction.stage.StageArea
 
+// TODO: add documentation and comments
+// TODO: transform to web app on Google? on Azure? with managed identity usage
 object App {
   private val logger = Logger(getClass)
-  // APIs worth trying (partially based on https://medium.com/@martin.breuss/finding-a-useful-dictionary-api-52084a01503d)
-  // Definition:
-  // 1. https://dictionaryapi.dev/
-  // 2. https://developer.oxforddictionaries.com/
-  // 3. https://www.dictionaryapi.com/
-  // Translation:
-  // 1. https://cloud.google.com/translate
-  // 2. https://docs.microsoft.com/en-us/azure/cognitive-services/translator/reference/v3-0-dictionary-examples
-  // Usage Rating:
-  // 1. https://books.google.com/ngrams
 
-  // Flow: Retrieve from db file -> parse -> filter bookmarks -> cleanse -> merge into delta -> extract new
-  // -> define -> checkout golden delta by normalized form and definition -> extract new -> translate -> merge into golden delta
-  // -> extract as CSV (override???) -> send to google sheets ???
-  // Q: will we be able to sort google sheet by the timestamp/book/usage index
-  // Q: can we use https://books.google.com/ngrams/info for usage rating?
   private val GOOGLE_CREDENTIALS_FILE_PATH = "conf/credentials/google_service.json"
 
   protected[extraction] val SourceDbPath    = "D:/system/config/books.db"
@@ -65,23 +52,23 @@ object App {
                        manualEnrichmentArea: SheetsManualEnrichmentArea,
                        publisher: SheetsPublishArea) = {
     // TODO: use meanegful names instead of upsert everywhere
-//    deviceHighlights.snapshot
-//      .transform(df => stageArea.upsert(df))
-//      .transform(df => bronze.upsert(df))
-//      .transform(df => silverArea.upsert(df))
-//      .transform(df => goldenArea.upsert(df))
-//      .transform(df => publisher.upsert(df))
-//      .transform { publishSnapshot =>
-//        val silverSnapshot = silverArea.snapshot
-//        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
-//      }
-
-    goldenArea.snapshot
+    deviceHighlights.snapshot
+      .transform(df => stageArea.upsert(df))
+      .transform(df => bronze.upsert(df))
+      .transform(df => silverArea.upsert(df))
+      .transform(df => goldenArea.upsert(df))
       .transform(df => publisher.upsert(df))
       .transform { publishSnapshot =>
         val silverSnapshot = silverArea.snapshot
         manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
       }
+
+//    goldenArea.snapshot
+//      .transform(df => publisher.upsert(df.limit(10)))
+//      .transform { publishSnapshot =>
+//        val silverSnapshot = silverArea.snapshot
+//        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
+//      }
   }
 //  SparkSession.active.table("updateDictionary.silver").orderBy(org.apache.spark.sql.functions.col("occurrences").desc).show(false)
 }

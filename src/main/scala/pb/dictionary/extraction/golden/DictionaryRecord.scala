@@ -17,7 +17,7 @@ case class DictionaryRecord(
     examples: Seq[String],
     synonyms: Seq[String],
     antonyms: Seq[String],
-    translation: String,
+    translations: Seq[String],
     usage: Option[Double],
     updatedAt: Timestamp,
 ) extends ApplicationManagedProduct
@@ -54,8 +54,8 @@ object DictionaryRecord extends ApplicationManagedProductCompanion[DictionaryRec
     EXAMPLES,
   )
 
-  val TRANSLATION        = "translation"
+  val TRANSLATIONS       = "translations"
   val USAGE              = "usage"
-  val enrichedAttributes = Seq(TRANSLATION, USAGE)
+  val enrichedAttributes = Seq(TRANSLATIONS, USAGE)
 
 }

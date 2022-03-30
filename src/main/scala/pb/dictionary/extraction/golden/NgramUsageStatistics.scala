@@ -6,8 +6,10 @@ import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher, RemoteHttpEnrichmentException}
+import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher}
 import pb.dictionary.extraction.golden.NgramUsageStatistics._
+import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner.SafeSingleTaskRps
+import pb.dictionary.extraction.silver.PartOfSpeech
 
 import scala.util.Try
 
@@ -65,12 +67,13 @@ object NgramUsageStatistics {
   def apply(corpus: String                = "eng_2019",
             yearStart: Int                = 2015,
             yearEnd: Int                  = 2019,
-            maxConcurrentConnections: Int = 1): NgramUsageStatistics = {
+            maxConcurrentConnections: Int = 1,
+            singleTaskRps: Option[Double] = Option(SafeSingleTaskRps)): NgramUsageStatistics = {
     val client: Option[Double] => NgramEnricher with NgramParallelHttpEnricher =
       new NgramEnricher(corpus, yearStart, yearEnd)(_) with NgramParallelHttpEnricher {
         override protected val concurrentConnections = maxConcurrentConnections
       }
-    new NgramUsageStatistics(new NgramDfEnricher(client, Option(SafeSingleTaskRps)))
+    new NgramUsageStatistics(new NgramDfEnricher(client, singleTaskRps))
   }
 
   object ResponseStructure {
@@ -94,23 +97,21 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
     singleTaskRps: Option[Double] = Option(SafeSingleTaskRps)
 ) extends RemoteHttpEnricher[Row, Row](singleTaskRps) {
   private val partOfSpeechMapping = Map(
-    "noun"              -> "NOUN",
-    "verb"              -> "VERB",
-    "adjective"         -> "ADJ",
-    "adverb"            -> "ADV",
-    "pronoun"           -> "PRON",
-    "determiner"        -> "DET",
-    "preposition"       -> "ADP",
-    "number"            -> "NUM",
-    "conjunction"       -> "CONJ",
-    "particle"          -> "PRT",
-    "infinitive marker" -> "PRT",
-    "exclamation"       -> "PRT",
-    // this parts of speech were unseen in the requests, but we keep them just in case
-    "postposition" -> "ADP",
-    "article"      -> "DET",
+    PartOfSpeech.NOUN              -> "NOUN",
+    PartOfSpeech.VERB              -> "VERB",
+    PartOfSpeech.ADJECTIVE         -> "ADJ",
+    PartOfSpeech.ADVERB            -> "ADV",
+    PartOfSpeech.PRONOUN           -> "PRON",
+    PartOfSpeech.DETERMINER        -> "DET",
+    PartOfSpeech.PREPOSITION       -> "ADP",
+    PartOfSpeech.NUMBER            -> "NUM",
+    PartOfSpeech.CONJUNCTION       -> "CONJ",
+    PartOfSpeech.PARTICLE          -> "PRT",
+    PartOfSpeech.INFINITIVE_MARKER -> "PRT",
+    PartOfSpeech.EXCLAMATION       -> "PRT",
+    PartOfSpeech.POSTPOSITION      -> "ADP",
+    PartOfSpeech.ARTICLE           -> "DET",
   )
-
 
   override def enrich(record: Row): Row = {
     Row.fromSeq(record.toSeq :+ requestEnrichment(record))

@@ -55,3 +55,22 @@ object DefinedText extends ApplicationManagedProductCompanion[DefinedText] {
   )
 
 }
+
+// TODO: enum?
+object PartOfSpeech {
+  val NOUN              = "noun"
+  val VERB              = "verb"
+  val ADJECTIVE         = "adjective"
+  val ADVERB            = "adverb"
+  val PRONOUN           = "pronoun"
+  val DETERMINER        = "determiner"
+  val PREPOSITION       = "preposition"
+  val NUMBER            = "number"
+  val CONJUNCTION       = "conjunction"
+  val PARTICLE          = "particle"
+  val INFINITIVE_MARKER = "infinitive marker"
+  val EXCLAMATION       = "exclamation"
+  // this parts of speech were unseen in the requests, but we keep them just in case
+  val POSTPOSITION      = "postposition"
+  val ARTICLE           = "article"
+}

@@ -1,16 +1,13 @@
 package pb.dictionary.extraction.golden
 
-import org.apache.http.{HttpStatus, HttpVersion}
-import org.apache.http.client.methods.{CloseableHttpResponse, HttpUriRequest}
-import org.apache.http.entity.{ContentType, StringEntity}
-import org.apache.http.impl.client.CloseableHttpClient
-import org.apache.http.message.BasicStatusLine
+import org.apache.http.{HttpResponse, HttpStatus}
+import org.apache.http.client.methods.HttpUriRequest
 import org.apache.spark.sql.Row
 import org.apache.spark.SparkException
 import org.mockito.{ArgumentMatchers, Mockito}
-import org.mockito.invocation.InvocationOnMock
 import pb.dictionary.extraction.{RemoteHttpEnrichmentException, TestBase}
 import pb.dictionary.extraction.golden.NgramUsageStatistics.NgramDfEnricher
+import pb.dictionary.extraction.EnricherTestUtils._
 
 // NOTE!!! DataFrame asserts hangs on rdd.unpersist step if `NgramDfEnricher` throw an exception.
 // The reason is unknown. This does not happen with `DictionaryApiDevWordDefiner`, nor it was fixed
@@ -22,7 +19,7 @@ class NgramUsageStatisticsTest extends TestBase {
   val sourceSchema = s"$NORMALIZED_TEXT String, $PART_OF_SPEECH String, $OCCURRENCES Int"
   val finalSchema  = s"$sourceSchema, $USAGE double"
 
-  describe("enrich method") {
+  describe("findUsageFrequency method") {
 
     describe("Should populate usage column with books usage average over the requested period") {
       it("when only a single form was found for a text") {
@@ -32,11 +29,16 @@ class NgramUsageStatisticsTest extends TestBase {
           Row("duck", "verb", 2)
         )
         val testClient = new TestNgramRemoteHttpEnricher(
-          HttpStatus.SC_OK,
-          Map(
-            "https://books.google.com/ngrams/json?content=duck_NOUN%3Aeng_2019&year_start=2015&year_end=2019" -> """[{"ngram": "duck_NOUN:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.1, 0.2, 0.3, 0.4]}]""",
-            "https://books.google.com/ngrams/json?content=duck_VERB%3Aeng_2019&year_start=2015&year_end=2019" -> """[{"ngram": "duck_VERB:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.01, 0.02, 0.03, 0.04]}]""",
-          )
+          EnricherResponseInfo(
+            "https://books.google.com/ngrams/json?content=duck_NOUN%3Aeng_2019&year_start=2015&year_end=2019",
+            """[{"ngram": "duck_NOUN:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.1, 0.2, 0.3, 0.4]}]""",
+            HttpStatus.SC_OK
+          ),
+          EnricherResponseInfo(
+            "https://books.google.com/ngrams/json?content=duck_VERB%3Aeng_2019&year_start=2015&year_end=2019",
+            """[{"ngram": "duck_VERB:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.01, 0.02, 0.03, 0.04]}]""",
+            HttpStatus.SC_OK
+          ),
         )
 
         val ngramClient = new NgramUsageStatistics(new NgramDfEnricher(testClient))
@@ -56,10 +58,9 @@ class NgramUsageStatisticsTest extends TestBase {
         )
 
         val testClient = new TestNgramRemoteHttpEnricher(
-          HttpStatus.SC_OK,
-          Map(
-            "https://books.google.com/ngrams/json?content=Univercity+of+*%3Aeng_2019&year_start=2015&year_end=2019" ->
-              """
+          EnricherResponseInfo(
+            "https://books.google.com/ngrams/json?content=Univercity+of+*%3Aeng_2019&year_start=2015&year_end=2019",
+            """
                 |[
                 |  {
                 |    "ngram": "Univercity of California:eng_2019",
@@ -85,7 +86,8 @@ class NgramUsageStatisticsTest extends TestBase {
                 |  }
                 |]
               """.stripMargin,
-          )
+            HttpStatus.SC_OK
+          ),
         )
 
         val ngramClient = new NgramUsageStatistics(new NgramDfEnricher(testClient))
@@ -106,11 +108,14 @@ class NgramUsageStatisticsTest extends TestBase {
           Row("lolkek", "abbreviation", 2)
         )
         val testClient = new TestNgramRemoteHttpEnricher(
-          HttpStatus.SC_OK,
-          Map(
-            "https://books.google.com/ngrams/json?content=lolkek_NOUN%3Aeng_2019&year_start=2015&year_end=2019" -> "[]",
-            "https://books.google.com/ngrams/json?content=lolkek%3Aeng_2019&year_start=2015&year_end=2019"      -> "[]",
-          )
+          EnricherResponseInfo(
+            "https://books.google.com/ngrams/json?content=lolkek_NOUN%3Aeng_2019&year_start=2015&year_end=2019",
+            "[]",
+            HttpStatus.SC_OK),
+          EnricherResponseInfo(
+            "https://books.google.com/ngrams/json?content=lolkek%3Aeng_2019&year_start=2015&year_end=2019",
+            "[]",
+            HttpStatus.SC_OK),
         )
 
         val ngramClient = new NgramUsageStatistics(new NgramDfEnricher(testClient))
@@ -133,16 +138,19 @@ class NgramUsageStatisticsTest extends TestBase {
           Row("duck", "verb", 2)
         )
         val testClient = new TestNgramRemoteHttpEnricher(
-          HttpStatus.SC_SERVICE_UNAVAILABLE,
-          Map(
-            "https://books.google.com/ngrams/json?content=duck_NOUN%3Aeng_2019&year_start=2015&year_end=2019" -> "",
-            "https://books.google.com/ngrams/json?content=duck_VERB%3Aeng_2019&year_start=2015&year_end=2019" -> "",
-          )
+          EnricherResponseInfo(
+            "https://books.google.com/ngrams/json?content=duck_NOUN%3Aeng_2019&year_start=2015&year_end=2019",
+            "",
+            HttpStatus.SC_SERVICE_UNAVAILABLE),
+          EnricherResponseInfo(
+            "https://books.google.com/ngrams/json?content=duck_VERB%3Aeng_2019&year_start=2015&year_end=2019",
+            "",
+            HttpStatus.SC_SERVICE_UNAVAILABLE),
         )
 
         val ngramClient = new NgramUsageStatistics(new NgramDfEnricher(testClient))
-        val actual = the[SparkException] thrownBy (ngramClient.findUsageFrequency(df).collect())
-        actual.getCause shouldBe a [RemoteHttpEnrichmentException]
+        val actual      = the[SparkException] thrownBy (ngramClient.findUsageFrequency(df).collect())
+        actual.getCause shouldBe a[RemoteHttpEnrichmentException]
       }
     }
 
@@ -154,10 +162,11 @@ class NgramUsageStatisticsTest extends TestBase {
         Row("duck", "noun", 2),
       )
       val testClient = new TestNgramRemoteHttpEnricher(
-        HttpStatus.SC_OK,
-        Map(
-          "https://books.google.com/ngrams/json?content=duck_NOUN%3Aeng_2019&year_start=2015&year_end=2019" -> """[{"ngram": "duck_NOUN:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.1, 0.2, 0.3, 0.4]}]""",
-        )
+        EnricherResponseInfo(
+          "https://books.google.com/ngrams/json?content=duck_NOUN%3Aeng_2019&year_start=2015&year_end=2019",
+          """[{"ngram": "duck_NOUN:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.1, 0.2, 0.3, 0.4]}]""",
+          HttpStatus.SC_OK
+        ),
       )
 
       val ngramClient = new NgramUsageStatistics(new NgramDfEnricher(testClient))
@@ -168,7 +177,7 @@ class NgramUsageStatisticsTest extends TestBase {
         Row("duck", "noun", 2, 0.25),
       )
       assertDataFrameApproximateEquals(actual.orderBy(OCCURRENCES), expected, 0.001)
-      Mockito.verify(testClient.httpClient, Mockito.atMostOnce())
+      Mockito.verify(testClient.httpClient, Mockito.atMostOnce()).execute(ArgumentMatchers.any())
     }
 
     it("Should use part_of_speech to distinguish text meanings") {
@@ -178,11 +187,16 @@ class NgramUsageStatisticsTest extends TestBase {
         Row("funny", "adjective", 2),
       )
       val testClient = new TestNgramRemoteHttpEnricher(
-        HttpStatus.SC_OK,
-        Map(
-          "https://books.google.com/ngrams/json?content=funny_NOUN%3Aeng_2019&year_start=2015&year_end=2019" -> """[{"ngram": "funny_NOUN:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.01, 0.02, 0.03, 0.04]}]""",
-          "https://books.google.com/ngrams/json?content=funny_ADJ%3Aeng_2019&year_start=2015&year_end=2019"  -> """[{"ngram": "funny_ADJ:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.4, 0.3, 0.2, 0.1]}]""",
-        )
+        EnricherResponseInfo(
+          "https://books.google.com/ngrams/json?content=funny_NOUN%3Aeng_2019&year_start=2015&year_end=2019",
+          """[{"ngram": "funny_NOUN:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.01, 0.02, 0.03, 0.04]}]""",
+          HttpStatus.SC_OK
+        ),
+        EnricherResponseInfo(
+          "https://books.google.com/ngrams/json?content=funny_ADJ%3Aeng_2019&year_start=2015&year_end=2019",
+          """[{"ngram": "funny_ADJ:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.4, 0.3, 0.2, 0.1]}]""",
+          HttpStatus.SC_OK
+        ),
       )
 
       val ngramClient = new NgramUsageStatistics(new NgramDfEnricher(testClient))
@@ -202,11 +216,16 @@ class NgramUsageStatisticsTest extends TestBase {
         Row("MY", "abbreviation", 2),
       )
       val testClient = new TestNgramRemoteHttpEnricher(
-        HttpStatus.SC_OK,
-        Map(
-          "https://books.google.com/ngrams/json?content=die+hard%3Aeng_2019&year_start=2015&year_end=2019" -> """[{"ngram": "die hard:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.01, 0.02, 0.03, 0.04]}]""",
-          "https://books.google.com/ngrams/json?content=MY%3Aeng_2019&year_start=2015&year_end=2019"       -> """[{"ngram": "MY:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.4, 0.3, 0.2, 0.1]}]""",
-        )
+        EnricherResponseInfo(
+          "https://books.google.com/ngrams/json?content=die+hard%3Aeng_2019&year_start=2015&year_end=2019",
+          """[{"ngram": "die hard:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.01, 0.02, 0.03, 0.04]}]""",
+          HttpStatus.SC_OK
+        ),
+        EnricherResponseInfo(
+          "https://books.google.com/ngrams/json?content=MY%3Aeng_2019&year_start=2015&year_end=2019",
+          """[{"ngram": "MY:eng_2019", "parent": "", "type": "NGRAM", "timeseries": [0.4, 0.3, 0.2, 0.1]}]""",
+          HttpStatus.SC_OK
+        ),
       )
 
       val ngramClient = new NgramUsageStatistics(new NgramDfEnricher(testClient))
@@ -221,32 +240,14 @@ class NgramUsageStatisticsTest extends TestBase {
   }
 }
 
-class TestNgramRemoteHttpEnricher(responseCode: Int, responses: Map[String, String])
-    extends NgramEnricher("eng_2019", 2015, 2019)(None) {
+class TestNgramRemoteHttpEnricher(val responsesInfo: EnricherResponseInfo*)
+    extends NgramEnricher("eng_2019", 2015, 2019)(None)
+    with MockedHttpClient[Row, Row] {
+
   import org.scalatest.Assertions._
-  override lazy val httpClient = {
 
-    val httpClientMock = Mockito.mock(classOf[CloseableHttpClient])
-    val statusLine     = new BasicStatusLine(HttpVersion.HTTP_1_1, responseCode, "")
-
-    def usageResponse(body: StringEntity) = {
-      val response = Mockito.mock(classOf[CloseableHttpResponse])
-      Mockito.when(response.getStatusLine).thenReturn(statusLine)
-      Mockito.when(response.getEntity).thenReturn(body)
-      response
-    }
-
-    val httpResponses = responses.mapValues { responseBody =>
-      usageResponse(new StringEntity(responseBody, ContentType.APPLICATION_JSON))
-    }
-
-    Mockito
-      .when(httpClientMock.execute(ArgumentMatchers.any()))
-      .thenAnswer((invocation: InvocationOnMock) => {
-        val request = invocation.getArgument[HttpUriRequest](0)
-        val url     = request.getURI.toString
-        httpResponses.getOrElse(url, fail(s"Request to unexpected URL $url. Stop the execution if spark hangs."))
-      })
-    httpClientMock
+  override def generateResponse(request: HttpUriRequest): HttpResponse = {
+    val url = request.getURI.toString
+    expectedHttpResponses.getOrElse(url, fail(s"Request to unexpected URL $url. Stop the execution if spark hangs."))
   }
 }

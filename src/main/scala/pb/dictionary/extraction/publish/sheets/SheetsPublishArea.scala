@@ -62,7 +62,6 @@ class SheetsPublishArea(
         // string attributes may be fixed manually, Sheet data are in priority
         coalesceEmptyString(colPublished(PART_OF_SPEECH), colGolden(PART_OF_SPEECH)) as PART_OF_SPEECH,
         coalesceEmptyString(colPublished(PHONETIC), colGolden(PHONETIC)) as PHONETIC,
-        coalesceEmptyString(colPublished(TRANSLATION), colGolden(TRANSLATION)) as TRANSLATION,
         coalesceEmptyString(colPublished(USAGE), concat(format_number(colGolden(USAGE) * 100, UsageDecimals), lit("%"))) as USAGE,
         // Attributes that can be updated from the device. Golden area values are in priority to reflect the latest attributes state
         coalesce(colGolden(OCCURRENCES), colPublished(OCCURRENCES), lit(1)) as OCCURRENCES,
@@ -74,6 +73,7 @@ class SheetsPublishArea(
         coalesceEmptyString(mergeArrayAttributes(colPublished(EXAMPLES), colGolden(EXAMPLES))) as EXAMPLES,
         coalesceEmptyString(mergeArrayAttributes(colPublished(SYNONYMS), colGolden(SYNONYMS))) as SYNONYMS,
         coalesceEmptyString(mergeArrayAttributes(colPublished(ANTONYMS), colGolden(ANTONYMS))) as ANTONYMS,
+        coalesceEmptyString(mergeArrayAttributes(colPublished(TRANSLATIONS), colGolden(TRANSLATIONS))) as TRANSLATIONS,
         // Non-existing Golden columns
         coalesceEmptyString(colPublished(TAGS)) as TAGS,
         coalesceEmptyString(colPublished(NOTES)) as NOTES

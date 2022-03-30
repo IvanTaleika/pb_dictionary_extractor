@@ -30,7 +30,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
   }
 
   override val areaName: String = "golden"
-  describe("update method") {
+  describe("upsert method") {
     it(
       "Should select all updated definitions, send new definition through translate and usage APIs " +
         "and execute merge method") {
@@ -195,7 +195,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("old habits die hard"),
             Seq.empty,
             Seq.empty,
-            "die hard translation",
+            Seq("die hard translation"),
             Option(1d),
             t"2020-01-01T00:00:00Z",
           ),
@@ -212,7 +212,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer"),
-            "diehard translation",
+            Seq("diehard translation"),
             Option(1d),
             t"2020-01-01T00:00:00Z",
           )
@@ -267,7 +267,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("duck example"),
             Seq("duck synonym"),
             Seq("duck antonym"),
-            "duck translated",
+            Seq("duck translated"),
             Option(1d),
             testTimestamp
           ),
@@ -284,7 +284,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a thin peevish voice"),
             Seq("irritable", "...", "miffy"),
             Seq("affable", "easy-going"),
-            "peevish translated",
+            Seq("peevish translated"),
             Option(1d),
             testTimestamp
           ),
@@ -308,7 +308,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
         )
       )
 
-      val translatedDf = expectedNewEntries.withColumn(TRANSLATION, concat(col(NORMALIZED_TEXT), lit(" translated")))
+      val translatedDf = expectedNewEntries.withColumn(TRANSLATIONS, array(concat(col(NORMALIZED_TEXT), lit(" translated"))))
       Mockito.when(dictionaryTranslationApi.translate(ArgumentMatchers.any())).thenReturn(translatedDf)
 
       val usageDf = translatedDf.withColumn(USAGE, lit(1d))
@@ -337,7 +337,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       (dictionaryTranslationApi.translate _)
         .expects(new FunctionAdapter1[DataFrame, Boolean](_.isEmpty))
         .onCall { df: DataFrame =>
-          df.withColumn(TRANSLATION, lit("N/A"))
+          df.withColumn(TRANSLATIONS, array(lit("N/A")))
         }
         .once()
 
@@ -400,8 +400,10 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
           )
         )
       )
-      val actual   = testObj.upsert(silverSnapshot)
-      val expected = spark.emptyDataset[DictionaryRecord]
+      val actual   = testObj.upsert(silverSnapshot).toDF()
+      val expected = spark.emptyDataset[DictionaryRecord].toDF()
+
+      assertDataFrameDataEquals(actual, expected)
     }
   }
 
@@ -424,7 +426,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("duck example"),
             Seq("duck synonym"),
             Seq("duck antonym"),
-            "duck translation",
+            Seq("duck translation"),
             Option(1d),
             testTimestamp
           ),
@@ -441,7 +443,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a thin peevish voice"),
             Seq("irritable", "...", "miffy"),
             Seq("affable", "easy-going"),
-            "peevish translation",
+            Seq("peevish translation"),
             Option(1d),
             testTimestamp
           ),
@@ -487,7 +489,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("duck example"),
             Seq("duck synonym"),
             Seq("duck antonym"),
-            "duck translation",
+            Seq("duck translation"),
             Option(1d),
             firstTimestamp
           ),
@@ -504,7 +506,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer"),
-            "diehard translation",
+            Seq("diehard translation"),
             Option(1d),
             firstTimestamp
           )
@@ -544,7 +546,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a thin peevish voice"),
             Seq("irritable", "...", "miffy"),
             Seq("affable", "easy-going"),
-            "peevish translation",
+            Seq("peevish translation"),
             Option(1d),
             secondTimestamp
           )
@@ -566,7 +568,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("duck example"),
             Seq("duck synonym"),
             Seq("duck antonym"),
-            "duck translation",
+            Seq("duck translation"),
             Option(1d),
             secondTimestamp
           ),
@@ -583,7 +585,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a thin peevish voice"),
             Seq("irritable", "...", "miffy"),
             Seq("affable", "easy-going"),
-            "peevish translation",
+            Seq("peevish translation"),
             Option(1d),
             secondTimestamp
           )
@@ -604,7 +606,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer"),
-            "diehard translation",
+            Seq("diehard translation"),
             Option(1d),
             firstTimestamp
           )
@@ -632,7 +634,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("duck example"),
             Seq("duck synonym"),
             Seq("duck antonym"),
-            "duck translation",
+            Seq("duck translation"),
             Option(1d),
             testTimestamp
           ),
@@ -649,7 +651,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Seq("a diehard Yankees fan"),
             Seq("hard-line", "...", "blimp"),
             Seq("modernizer"),
-            "diehard translation",
+            Seq("diehard translation"),
             Option(1d),
             testTimestamp
           )

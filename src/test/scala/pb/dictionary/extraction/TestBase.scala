@@ -12,7 +12,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions.{array_sort, col}
 import org.mockito.ArgumentMatchers
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSpec, Matchers}
+import org.scalatest.{AppendedClues, BeforeAndAfterAll, BeforeAndAfterEach, FunSpec, Matchers}
 
 import java.io.File
 import java.sql.Timestamp
@@ -25,7 +25,8 @@ abstract class TestBase
     with BeforeAndAfterEach
     with Matchers
     with MockFactory
-    with DataFrameSuiteBase {
+    with DataFrameSuiteBase
+    with AppendedClues {
   val appName          = "pb_dictionary_extractor_tests"
   val warehousePath    = "target/spark-warehouse"
   protected val logger = Logger(getClass)

@@ -89,12 +89,13 @@ object DictionaryApiDevWordDefiner {
   // rate limit is 450 request per 5 minutes. However, during USA day hours API just fails to keep up with request
   val SafeSingleTaskRps: Double = 1.49
 
-  def apply(maxConcurrentConnections: Int = 1): DictionaryApiDevWordDefiner = {
+  def apply(maxConcurrentConnections: Int = 1,
+            singleTaskRps: Option[Double] = Option(SafeSingleTaskRps)): DictionaryApiDevWordDefiner = {
     val enricher: Option[Double] => DictionaryApiDevEnricher with DictionaryApiDevParallelHttpEnricher =
       new DictionaryApiDevEnricher(_) with DictionaryApiDevParallelHttpEnricher {
         override protected val concurrentConnections = maxConcurrentConnections
       }
-    new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(enricher, Option(SafeSingleTaskRps)))
+    new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(enricher, singleTaskRps))
   }
 
   object ResponseStructure {
@@ -171,14 +172,14 @@ abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(S
         // to be enough in most cases
         case e: SSLHandshakeException =>
           logger.error(s"Request `${request}` failed with exception", e)
-          if (i < MAX_ATTEMPTS) {
+          if (i < MAX_RETRIES) {
             logger.warn(
-              s"Pausing requests execution before retrying the request `${request}`. Current attempt was `$i` from `$MAX_ATTEMPTS`")
+              s"Pausing requests execution before retrying the request `${request}`. Current attempt was `$i` from `$MAX_RETRIES`")
             pauseRequests(TOO_MANY_REQUESTS_PAUSE_TIME_MS)
             None
           } else {
             val errorMessage =
-              s"Failed to execute request `${request}` in `$MAX_ATTEMPTS` attempts. " +
+              s"Failed to execute request `${request}` in `$MAX_RETRIES` attempts. " +
                 s"Aborting execution with the latest exception"
             logger.error(errorMessage, e)
             throw RemoteHttpEnrichmentException(errorMessage, e)
@@ -189,7 +190,7 @@ abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(S
 }
 
 object DictionaryApiDevEnricher {
-  private val MAX_ATTEMPTS = 3
+  private val MAX_RETRIES = 3
   // Rate limit is calculating over the 5 minutes window
   private val TOO_MANY_REQUESTS_PAUSE_TIME_MS = 5 * 60 * 1000
 }

@@ -1,9 +1,11 @@
 package pb.dictionary.extraction.golden
 
 import org.apache.spark.sql.Row
+import org.scalatest.tags.Slow
 import pb.dictionary.extraction.RemoteHttpEnricherTestBase
 import pb.dictionary.extraction.golden.NgramUsageStatistics.SafeSingleTaskRps
 
+@Slow
 class NgramEnricherTest extends RemoteHttpEnricherTestBase {
   var testRecord: Row = _
 

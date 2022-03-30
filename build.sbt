@@ -5,7 +5,7 @@ version := "0.1"
 val scalaMajorVersion = "2.12"
 val scalaMinorVersion = "15"
 val sparkVersion      = "3.2.0"
-
+val circeVersion      = "0.14.1"
 scalaVersion := s"$scalaMajorVersion.$scalaMinorVersion"
 
 libraryDependencies := Seq(
@@ -15,7 +15,9 @@ libraryDependencies := Seq(
 
   "org.xerial" % "sqlite-jdbc" % "3.36.0.3",
   "org.apache.httpcomponents" % "httpclient" % "4.5.13",
-
+  "io.circe" %% "circe-core" % circeVersion,
+  "io.circe" %% "circe-generic" % circeVersion,
+  "io.circe" %% "circe-parser" % circeVersion,
   "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.17.1",
   "org.clapper" %% "grizzled-slf4j" % "1.3.4",
 

@@ -17,7 +17,7 @@ case class VocabularyRow(
     examples: String,
     synonyms: String,
     antonyms: String,
-    translation: String,
+    translations: String,
     usage: String,
     tags: String,
     notes: String,
@@ -29,7 +29,7 @@ object VocabularyRow extends FinalPublishProductCompanion[VocabularyRow] {
   val PART_OF_SPEECH    = "partOfSpeech"
   val PHONETIC          = "phonetic"
   val OCCURRENCES       = "occurrences"
-  val TRANSLATION       = "translation"
+  val TRANSLATIONS      = "translations"
   val STATUS            = "status"
   val SOURCES           = "sources"
   val FIRST_OCCURRENCE  = "firstOccurrence"
@@ -49,7 +49,7 @@ object VocabularyRow extends FinalPublishProductCompanion[VocabularyRow] {
       FORMS,
       OCCURRENCES,
       DEFINITION,
-      TRANSLATION,
+      TRANSLATIONS,
       STATUS,
       SOURCES,
       FIRST_OCCURRENCE,

@@ -59,11 +59,12 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
     enrichmentString
   }
 
-  protected def consumeResponse(response: CloseableHttpResponse) = {
+  protected def consumeResponse(response: CloseableHttpResponse): String = {
     EntityUtils.toString(response.getEntity, StandardCharsets.UTF_8)
   }
 
-  protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest, i: Int) = {
+  protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest,
+                                                                      i: Int): Option[String] = {
     Option(consumeResponse(response.get))
   }
 

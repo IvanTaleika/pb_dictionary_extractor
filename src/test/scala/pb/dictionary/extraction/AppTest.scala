@@ -2,6 +2,7 @@ package pb.dictionary.extraction
 
 import com.google.api.services.drive.{Drive, DriveScopes}
 import com.google.api.services.sheets.v4.{Sheets, SheetsScopes}
+import org.apache.commons.io.IOUtils
 import org.apache.spark.sql.Encoders
 import org.scalatest.tags.Slow
 import pb.dictionary.extraction.bronze.BronzeArea
@@ -11,6 +12,7 @@ import pb.dictionary.extraction.publish.sheets.{GoogleServicesFactory, SheetsMan
 import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.{ZonedDateTime, ZoneOffset}
 
@@ -40,10 +42,22 @@ class AppTest extends TestBase {
       val manualEnrichmentSheetPath = s"$testSpreadsheet/Manual"
       val vocabularySheetPath       = s"$testSpreadsheet/Main"
 
-      val CREDENTIALS_FILE_PATH = "conf/credentials/google_service.json"
-      val googleServicesFactory = new GoogleServicesFactory(appName, CREDENTIALS_FILE_PATH)
+      val GOOGLE_CREDENTIALS_FILE_PATH           = "conf/credentials/google_service.json"
+      val AZURE_TRANSLATOR_CREDENTIALS_FILE_PATH = "conf/credentials/azure_translator.json"
+
+      val googleServicesFactory = new GoogleServicesFactory(appName, GOOGLE_CREDENTIALS_FILE_PATH)
       val driveService          = googleServicesFactory.create[Drive](DriveScopes.DRIVE_METADATA_READONLY)
       val spreadsheetsService   = googleServicesFactory.create[Sheets](SheetsScopes.SPREADSHEETS)
+
+      val azureDictionaryTranslation = {
+        val credentialsFile = AreaUtils.fetchCredentialsFile(AZURE_TRANSLATOR_CREDENTIALS_FILE_PATH)
+        try {
+          val key = IOUtils.toString(credentialsFile, StandardCharsets.UTF_8)
+          AzureDictionaryLookup(key)
+        } finally {
+          credentialsFile.close()
+        }
+      }
 
       val sampleFile = this.getClass.getResource("deviceHighlightsSample.csv").getPath
 
@@ -56,7 +70,7 @@ class AppTest extends TestBase {
       val bronzeArea = new BronzeArea(bronzeAreaPath, timestampProvider)
       val silverArea = new SilverArea(silverAreaPath, DictionaryApiDevWordDefiner(), timestampProvider)
       val goldenArea =
-        new GoldenArea(goldenAreaPath, new DummyDictionaryTranslator(), NgramUsageStatistics(), timestampProvider)
+        new GoldenArea(goldenAreaPath, azureDictionaryTranslation, NgramUsageStatistics(), timestampProvider)
       val manualEnrichmentArea =
         new SheetsManualEnrichmentArea(manualEnrichmentSheetPath, driveService, spreadsheetsService, timestampProvider)
       val publish = new SheetsPublishArea(vocabularySheetPath, driveService, spreadsheetsService, timestampProvider)
@@ -67,7 +81,7 @@ class AppTest extends TestBase {
         .schema(deviceHighlightSchema)
         .load(sampleFile)
         .orderBy(DeviceHighlight.OID)
-      val oidCountPerSample = 100
+      val oidCountPerSample = 5
       (deviceHighlights.snapshot _).when().onCall { () =>
         val stageCount    = stageArea.snapshot.count()
         val deviceDbState = deviceHighlightsSample.limit(stageCount.toInt + oidCountPerSample)

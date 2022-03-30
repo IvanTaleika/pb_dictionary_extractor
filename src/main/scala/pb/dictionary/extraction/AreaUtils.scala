@@ -4,10 +4,20 @@ import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.functions.{col, date_format, lit}
 import pb.dictionary.extraction.ApplicationManagedProduct.UPDATED_AT
 
+import java.io.{File, FileInputStream, FileNotFoundException}
 import java.sql.Timestamp
 import scala.reflect.runtime.universe.TypeTag
 
 object AreaUtils {
+  // TODO: move to other utility class
+  def fetchCredentialsFile(path: String): FileInputStream = {
+    val credentialsFile = new File(path)
+    if (!credentialsFile.exists()) {
+      throw new FileNotFoundException(s"Credentials file not found: ${path}")
+    }
+   new FileInputStream(credentialsFile)
+  }
+
   def findUpdatesByUpdateTimestamp[In <: ApplicationManagedProduct: TypeTag, Out <: ApplicationManagedProduct: TypeTag](
       previousSnapshot: Dataset[Out])(snapshot: Dataset[In]): Dataset[In] = {
     val spark = SparkSession.active
