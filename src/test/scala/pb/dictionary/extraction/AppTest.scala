@@ -6,7 +6,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.spark.sql.Encoders
 import org.scalatest.tags.Slow
 import pb.dictionary.extraction.bronze.BronzeArea
-import pb.dictionary.extraction.device.{DeviceHighlight, DeviceHighlightsDb}
+import pb.dictionary.extraction.device.{PocketBookMark, PocketBookMarksArea}
 import pb.dictionary.extraction.golden._
 import pb.dictionary.extraction.publish.sheets.{GoogleServicesFactory, SheetsManualEnrichmentArea, SheetsPublishArea}
 import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
@@ -49,8 +49,9 @@ class AppTest extends TestBase {
       val driveService          = googleServicesFactory.create[Drive](DriveScopes.DRIVE_METADATA_READONLY)
       val spreadsheetsService   = googleServicesFactory.create[Sheets](SheetsScopes.SPREADSHEETS)
 
+      // TOOD: create factory for azure resources
       val azureDictionaryTranslation = {
-        val credentialsFile = AreaUtils.fetchCredentialsFile(AZURE_TRANSLATOR_CREDENTIALS_FILE_PATH)
+        val credentialsFile = AreaUtils.fetchFile(AZURE_TRANSLATOR_CREDENTIALS_FILE_PATH)
         try {
           val key = IOUtils.toString(credentialsFile, StandardCharsets.UTF_8)
           AzureDictionaryLookup(key)
@@ -61,8 +62,8 @@ class AppTest extends TestBase {
 
       val sampleFile = this.getClass.getResource("deviceHighlightsSample.csv").getPath
 
-      val deviceHighlights      = stub[DeviceHighlightsDb]
-      val deviceHighlightSchema = Encoders.product[DeviceHighlight].schema
+      val deviceHighlights      = stub[PocketBookMarksArea]
+      val deviceHighlightSchema = Encoders.product[PocketBookMark].schema
       val appRunTimestamp       = Timestamp.from(ZonedDateTime.now(ZoneOffset.UTC).toInstant)
       val timestampProvider     = () => appRunTimestamp
 
@@ -80,15 +81,15 @@ class AppTest extends TestBase {
         .options(Map("enforceSchema" -> "false", "mode" -> "FAILFAST", "multiline" -> "true", "header" -> "true"))
         .schema(deviceHighlightSchema)
         .load(sampleFile)
-        .orderBy(DeviceHighlight.OID)
+        .orderBy(PocketBookMark.OID)
       val oidCountPerSample = 5
       (deviceHighlights.snapshot _).when().onCall { () =>
         val stageCount    = stageArea.snapshot.count()
         val deviceDbState = deviceHighlightsSample.limit(stageCount.toInt + oidCountPerSample)
-        deviceDbState.as[DeviceHighlight]
+        deviceDbState.as[PocketBookMark]
       }
 
-      App.updateDictionary(
+      App.updateGoogleSheets(
         deviceHighlights,
         stageArea,
         bronzeArea,

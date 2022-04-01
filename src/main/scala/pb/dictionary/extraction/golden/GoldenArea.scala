@@ -9,19 +9,24 @@ import pb.dictionary.extraction.silver.DefinedText
 
 import java.sql.Timestamp
 
+/** Stores definitions enriched with translations and usage attributes.
+  * The goal of this area is to enrich a minimal learning [[DefinedText.pk]] unit with attributes
+  * that can ease learning process.
+  * The area stores data in a managed spark metastore table backed by Delta with a [[RichDefinedText.pk]] primary key.
+  */
 class GoldenArea(
     path: String,
     dictionaryTranslationApi: DictionaryTranslationApi,
     usageFrequencyApi: UsageFrequencyApi,
     timestampProvider: () => Timestamp
-) extends DeltaArea[DictionaryRecord](path) {
-  import DictionaryRecord._
+) extends DeltaArea[RichDefinedText](path) {
+  import RichDefinedText._
   import spark.implicits._
 
   private def pkMatches(t1: String, t2: String) =
     pk.map(cn => colFromTable(t1)(cn) === colFromTable(t2)(cn)).reduce(_ && _)
 
-  def upsert(silverSnapshot: Dataset[DefinedText]): Dataset[DictionaryRecord] = {
+  def upsert(silverSnapshot: Dataset[DefinedText]): Dataset[RichDefinedText] = {
     import spark.implicits._
     val updatedDefinitions = silverSnapshot
       .transform(AreaUtils.findUpdatesByUpdateTimestamp(snapshot))
@@ -60,17 +65,17 @@ class GoldenArea(
     val newGoldenRecords = latestDefinitionAttributes
       .groupBy((pkCols ++ definitionAttributes.map(col)): _*)
       .agg(
-        collect_set(DefinedText.TEXT) as DictionaryRecord.FORMS,
-        flatten(collect_set(col(DefinedText.BOOKS))) as DictionaryRecord.BOOKS,
-        sum(DefinedText.OCCURRENCES) cast IntegerType as DictionaryRecord.OCCURRENCES,
-        min(DefinedText.FIRST_OCCURRENCE) as DictionaryRecord.FIRST_OCCURRENCE,
-        max(DefinedText.LATEST_OCCURRENCE) as DictionaryRecord.LATEST_OCCURRENCE,
+        collect_set(DefinedText.TEXT) as RichDefinedText.FORMS,
+        flatten(collect_set(col(DefinedText.BOOKS))) as RichDefinedText.BOOKS,
+        sum(DefinedText.OCCURRENCES) cast IntegerType as RichDefinedText.OCCURRENCES,
+        min(DefinedText.FIRST_OCCURRENCE) as RichDefinedText.FIRST_OCCURRENCE,
+        max(DefinedText.LATEST_OCCURRENCE) as RichDefinedText.LATEST_OCCURRENCE,
       )
       .withColumn(BOOKS, array_distinct(col(BOOKS)))
     newGoldenRecords
   }
 
-  private def buildUpdateDf(existingEntries: DataFrame, newDefinitions: DataFrame): Dataset[DictionaryRecord] = {
+  private def buildUpdateDf(existingEntries: DataFrame, newDefinitions: DataFrame): Dataset[RichDefinedText] = {
     val currentTimestamp = timestampProvider()
 
     val dummyOldDefinitions = existingEntries
@@ -81,13 +86,13 @@ class GoldenArea(
             propagatingAttributesCols ++
             enrichedAttributesFields.map(f => lit(null) cast f.dataType as f.name)
         ): _*)
-      .as[DictionaryRecord]
-    val finishedNewDefinitions = newDefinitions.withColumn(UPDATED_AT, lit(currentTimestamp)).as[DictionaryRecord]
+      .as[RichDefinedText]
+    val finishedNewDefinitions = newDefinitions.withColumn(UPDATED_AT, lit(currentTimestamp)).as[RichDefinedText]
 
     dummyOldDefinitions.unionByName(finishedNewDefinitions)
   }
 
-  private[golden] def updateArea(updates: Dataset[DictionaryRecord]): Dataset[DictionaryRecord] = {
+  private[golden] def updateArea(updates: Dataset[RichDefinedText]): Dataset[RichDefinedText] = {
     deltaTable
       .as(tableName)
       .merge(updates.toDF().as(stagingAlias), pkMatches(tableName, stagingAlias))

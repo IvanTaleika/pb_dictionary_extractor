@@ -5,6 +5,14 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.types.StructField
 import pb.dictionary.extraction.ProductCompanion
 
+/**
+  * Specifies a minimal requirements for a end product record:
+  *
+  *   - [[FinalPublishProduct.ID]] a synthetic ID column
+  *   - [[FinalPublishProduct.NORMALIZED_TEXT]] a normalized text to learn
+  *   - [[FinalPublishProduct.DEFINITION]] a normalized text definition
+  *   - [[FinalPublishProduct.FORMS]] text, highlighted on the PocketBook page
+  */
 trait FinalPublishProduct extends Product {
 
   def id: Int
@@ -20,8 +28,7 @@ object FinalPublishProduct {
   val FORMS           = "forms"
 }
 
-trait FinalPublishProductCompanion[T <: FinalPublishProduct]
-    extends ProductCompanion[T] {
+trait FinalPublishProductCompanion[T <: FinalPublishProduct] extends ProductCompanion[T] {
 
   final val ID              = FinalPublishProduct.ID
   final val NORMALIZED_TEXT = FinalPublishProduct.NORMALIZED_TEXT

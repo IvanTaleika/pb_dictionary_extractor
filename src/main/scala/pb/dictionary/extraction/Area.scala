@@ -8,6 +8,9 @@ import pb.dictionary.extraction.ApplicationManagedProduct._
 import java.io.File
 import scala.reflect.io.Directory
 
+/** An area that stores data, without constraints on data format, metastore aliases, lifecycle and etc..
+  * The most generic data storage definition in a PocketBook dictionary application.
+  */
 abstract class Area[Out <: Product: ProductCompanion] {
   protected val logger   = Logger(getClass)
   protected val spark    = SparkSession.active
@@ -15,6 +18,8 @@ abstract class Area[Out <: Product: ProductCompanion] {
   val schema: StructType = areaDescriptor.schema
 
   def path: String
+
+  /** Returns the current area content. */
   def snapshot: Dataset[Out]
 }
 
@@ -23,6 +28,15 @@ import org.apache.spark.sql.functions.{col, lit}
 import java.nio.file.Paths
 import java.sql.Timestamp
 
+/** A data storage area that is created and managed by the `pb_dictionary_extractor` application.
+  * This area represents a managed spark table stored in a [[path]] path. Both database and table are
+  * available right after the object initialization (crated in the constructor, if does not exist already)
+  *
+  * @param path area location on the filesystem. The last folder name is equal to the table name
+  *             and its parent name is equal to the database name.
+  * @param format file format used to store the data.
+  * @tparam Out A [[ApplicationManagedProduct]] corresponding to the Area schema.
+  */
 abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](
     val path: String,
     val format: String)
@@ -61,6 +75,7 @@ abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: Applicat
 
 import io.delta.tables.DeltaTable
 
+/** An [[ApplicationManagedArea]] backed by the Delta format. */
 abstract class DeltaArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](path: String)
     extends ApplicationManagedArea[Out](path, "delta") {
   protected def deltaTable                                   = DeltaTable.forPath(absoluteTablePath)
@@ -70,6 +85,7 @@ abstract class DeltaArea[Out <: ApplicationManagedProduct: ApplicationManagedPro
   protected def colStaged(cn: String)                        = colFromTable(stagingAlias)(cn)
 }
 
+/** An [[ApplicationManagedArea]] backed by the CSV format. */
 abstract class CsvArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](
     path: String,
     timestampProvider: () => Timestamp)
@@ -110,6 +126,11 @@ abstract class CsvArea[Out <: ApplicationManagedProduct: ApplicationManagedProdu
 
 }
 
+/**
+  * An [[CsvArea]] where a full new snapshot is created on each write.
+  * [[snapshot]] method returns records with the latest [[ApplicationManagedProduct.UPDATED_AT]] value,
+  * instead of the whole table content.
+  */
 abstract class CsvSnapshotsArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](
     path: String,
     timestampProvider: () => Timestamp)
@@ -123,4 +144,5 @@ abstract class CsvSnapshotsArea[Out <: ApplicationManagedProduct: ApplicationMan
   }
 }
 
-case class InvalidAreaStateException(message: String, cause: Throwable = null) extends PbDictionaryException(message, cause)
+case class InvalidAreaStateException(message: String, cause: Throwable = null)
+    extends PbDictionaryException(message, cause)

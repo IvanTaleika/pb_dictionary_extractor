@@ -4,7 +4,8 @@ import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedPr
 
 import java.sql.Timestamp
 
-case class DictionaryRecord(
+/** Represents an vocabulary record with supplementary enrichments. */
+case class RichDefinedText(
     normalizedText: String,
     partOfSpeech: String,
     phonetic: String,
@@ -22,7 +23,7 @@ case class DictionaryRecord(
     updatedAt: Timestamp,
 ) extends ApplicationManagedProduct
 
-object DictionaryRecord extends ApplicationManagedProductCompanion[DictionaryRecord] {
+object RichDefinedText extends ApplicationManagedProductCompanion[RichDefinedText] {
   implicit val goldenAreaDescriptor: this.type = this
 
   // silver
@@ -54,8 +55,12 @@ object DictionaryRecord extends ApplicationManagedProductCompanion[DictionaryRec
     EXAMPLES,
   )
 
-  val TRANSLATIONS       = "translations"
-  val USAGE              = "usage"
+  /** Populated by [[DictionaryTranslationApi]] */
+  val TRANSLATIONS = "translations"
+
+  /** Populated by [[UsageFrequencyApi]] */
+  val USAGE = "usage"
+
   val enrichedAttributes = Seq(TRANSLATIONS, USAGE)
 
 }

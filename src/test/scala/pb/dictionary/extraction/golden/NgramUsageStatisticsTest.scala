@@ -14,7 +14,7 @@ import pb.dictionary.extraction.EnricherTestUtils._
 // by modifying the DAG in any ways. The issue is in unpersist call, so real run is not affected.
 // In case execution hangs for several minutes, app must be manually stopped.
 class NgramUsageStatisticsTest extends TestBase {
-  import pb.dictionary.extraction.golden.DictionaryRecord._
+  import pb.dictionary.extraction.golden.RichDefinedText._
 
   val sourceSchema = s"$NORMALIZED_TEXT String, $PART_OF_SPEECH String, $OCCURRENCES Int"
   val finalSchema  = s"$sourceSchema, $USAGE double"

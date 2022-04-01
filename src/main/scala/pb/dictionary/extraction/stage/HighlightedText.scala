@@ -4,6 +4,7 @@ import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedPr
 
 import java.sql.Timestamp
 
+/** Represents flatten PocketBook text highlight record. */
 case class HighlightedText(
     oid: Long,
     text: String,
@@ -22,8 +23,10 @@ object HighlightedText extends ApplicationManagedProductCompanion[HighlightedTex
   val TEXT                            = "text"
   val enrichedAttributes: Seq[String] = Seq(TEXT)
 
-  val TITLE                              = "title"
-  val AUTHORS                            = "authors"
+  val TITLE   = "title"
+  val AUTHORS = "authors"
+
+  /** Stores time when the text was highlighted */
   val TIME_EDT                           = "timeEdt"
   val propagatingAttributes: Seq[String] = Seq(TITLE, AUTHORS, TIME_EDT)
 

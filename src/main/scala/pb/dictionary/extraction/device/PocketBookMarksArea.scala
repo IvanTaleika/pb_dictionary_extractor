@@ -3,11 +3,14 @@ package pb.dictionary.extraction.device
 import org.apache.spark.sql.Dataset
 import pb.dictionary.extraction.Area
 
-class DeviceHighlightsDb(val path: String) extends Area[DeviceHighlight] {
-  private val HighlightTagId = 104
-  import DeviceHighlight._
+/** Stores all the marks left on the PocketBook books' pages.
+  * The area is backed Sqlite BD and managed by the by PocketBook device
+  */
+class PocketBookMarksArea(val path: String) extends Area[PocketBookMark] {
+  private val MarkTagId = 104
+  import PocketBookMark._
 
-  override def snapshot: Dataset[DeviceHighlight] = {
+  override def snapshot: Dataset[PocketBookMark] = {
     import spark.implicits._
     spark.read
       .format("jdbc")
@@ -29,9 +32,9 @@ class DeviceHighlightsDb(val path: String) extends Area[DeviceHighlight] {
            |  on i.ParentID = ii.OID
            |join books as b
            |  on ii.OID = b.OID
-           |where t.TagID = $HighlightTagId""".stripMargin
+           |where t.TagID = $MarkTagId""".stripMargin
       )
       .load()
-      .as[DeviceHighlight]
+      .as[PocketBookMark]
   }
 }

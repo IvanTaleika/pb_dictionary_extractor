@@ -2,7 +2,7 @@ package pb.dictionary.extraction.stage
 
 import org.apache.spark.sql.{Dataset, SaveMode}
 import pb.dictionary.extraction.ApplicationManagedAreaTestBase
-import pb.dictionary.extraction.device.DeviceHighlight
+import pb.dictionary.extraction.device.PocketBookMark
 
 class StageAreaTest extends ApplicationManagedAreaTestBase {
 
@@ -16,21 +16,21 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
           val area = new StageArea(areaPath, testTimestampProvider)
           val highlights = spark.createDataset(
             Seq(
-              DeviceHighlight(
+              PocketBookMark(
                 5228L,
                 "{\"text\":\"Bookmark\"}",
                 "A farewell to arms",
                 "Ernest Miller Hemingway",
                 1L
               ),
-              DeviceHighlight(
+              PocketBookMark(
                 7832L,
                 "{\"begin\":\"pbr:/word?page=78&offs=91\",\"end\":\"pbr:/word?page=78&over=97\",\"text\":\"yacht.\\\"\"}",
                 "The Great Gatsby",
                 "Francis Scott Fitzgerald",
                 2L
               ),
-              DeviceHighlight(
+              PocketBookMark(
                 8920L,
                 """{
                   "begin" : "pbr:/word?page=133&offs=1034",
@@ -42,7 +42,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
                 "Francis Scott Fitzgerald",
                 3L
               ),
-              DeviceHighlight(
+              PocketBookMark(
                 19475,
                 "{\"begin\":\"pbr:/word?page=83&offs=366\",\"end\":\"pbr:/word?page=83&over=372\",\"text\":\"prickle\"}",
                 "Harry Potter and the Sorcerer's Stone",
@@ -92,7 +92,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
           val area = new StageArea(areaPath, timestampProvider)
           val currentState = spark.createDataset(
             Seq(
-              DeviceHighlight(
+              PocketBookMark(
                 8920L,
                 """{
                   "begin" : "pbr:/word?page=133&offs=1034",
@@ -108,21 +108,21 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
           area.upsert(currentState)
           val highlights = spark.createDataset(
             Seq(
-              DeviceHighlight(
+              PocketBookMark(
                 5228L,
                 "{\"text\":\"Bookmark\"}",
                 "A farewell to arms",
                 "Ernest Miller Hemingway",
                 1L
               ),
-              DeviceHighlight(
+              PocketBookMark(
                 7832L,
                 "{\"begin\":\"pbr:/word?page=78&offs=91\",\"end\":\"pbr:/word?page=78&over=97\",\"text\":\"yacht.\\\"\"}",
                 "The Great Gatsby",
                 "Francis Scott Fitzgerald",
                 2L
               ),
-              DeviceHighlight(
+              PocketBookMark(
                 8920L,
                 """{
                   "begin" : "pbr:/word?page=133&offs=1034",
@@ -134,7 +134,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
                 "Francis Scott Fitzgerald",
                 3L
               ),
-              DeviceHighlight(
+              PocketBookMark(
                 19475L,
                 "{\"begin\":\"pbr:/word?page=83&offs=366\",\"end\":\"pbr:/word?page=83&over=372\",\"text\":\"prickle\"}",
                 "Harry Potter and the Sorcerer's Stone",
@@ -176,7 +176,7 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
         val area = new StageArea(areaPath, timestampProvider)
         val firstUpdate = spark.createDataset(
           Seq(
-            DeviceHighlight(
+            PocketBookMark(
               1L,
               "{\"begin\":\"pbr:/word?page=83&offs=366\",\"end\":\"pbr:/word?page=83&over=372\",\"text\":\"prickle\\nprickle\"}",
               "Harry Potter \nand the Sorcerer's Stone",
@@ -187,14 +187,14 @@ class StageAreaTest extends ApplicationManagedAreaTestBase {
         area.upsert(firstUpdate)
         val secondUpdate = spark.createDataset(
           Seq(
-            DeviceHighlight(
+            PocketBookMark(
               1L,
               "{\"begin\":\"pbr:/word?page=83&offs=366\",\"end\":\"pbr:/word?page=83&over=372\",\"text\":\"prickle\\nprickle\"}",
               "Harry Potter \nand the Sorcerer's Stone",
               "Joanne Kathleen \nRowling",
               1L
             ),
-            DeviceHighlight(
+            PocketBookMark(
               2L,
               "{\"begin\":\"pbr:/word?page=78&offs=91\",\"end\":\"pbr:/word?page=78&over=97\",\"text\":\"yacht\\nyacht\"}",
               "The \nGreat Gatsby",

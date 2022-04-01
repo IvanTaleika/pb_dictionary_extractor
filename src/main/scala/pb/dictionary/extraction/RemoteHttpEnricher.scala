@@ -13,28 +13,46 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.locks.{ReentrantLock, ReentrantReadWriteLock}
 import scala.util.Try
 
+/** Transform [[In]] record into [[Out]] record by enriching [[In]] with data returned by an HTTP request.
+  * This class is thread-safe, [[maxRequestsPerSecond]] are enforced per class instance, meaning max RPS
+  * is the same no matter how many threads are using this class (however, fluctuations are possible).
+  * In case a max RPS throttling is not enough (there can be accidental overuse of defined quotas), this
+  * class provides utilities to block all the enrichment invocation for some grace period.
+  *
+  * @param maxRequestsPerSecond controls how many requests can be sent per second of execution,
+  *                             by throttling records processing rate. This value specifies max RPS for a
+  *                             infinite-time working enrichment loop. Real-time RPS can fluctuate around
+  *                             this value.
+  */
 abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: Option[Double] = None)
     extends Serializable {
-  protected val SC_TOO_MANY_REQUESTS = 429
+  protected lazy val logger = Logger(getClass)
 
-  protected lazy val logger                         = Logger(getClass)
-  private lazy val requestPauseLock                 = new ReentrantLock()
-  private lazy val requestLock                      = new ReentrantReadWriteLock()
+  // Locked when API limit is reached before the `requestsLock` to ensure only one thread is explicitly
+  // sleeping the grace period.
+  private lazy val requestPauseLock = new ReentrantLock()
+  // Locked on read on before sending each HTTP request. Locked on write when API limit is reached and
+  // all the requests must be stopped.
+  private lazy val requestsLock = new ReentrantReadWriteLock()
+
+  /** Requests throttler. */
   private lazy val rateLimiter: Option[RateLimiter] = maxRequestsPerSecond.map(RateLimiter.create)
 
+  /** Transforms [[In]] record to [[Out]] record. Expects to call [[requestEnrichment]] method. */
   def enrich(record: In): Out
 
   protected def httpClient: CloseableHttpClient
   protected def buildRequest(record: In): HttpUriRequest
 
+  /** returns a [[buildRequest]]-created HTTP request response. */
   protected def requestEnrichment(record: In): String = {
     val request    = buildRequest(record)
     var enrichment = Option.empty[String]
     var i          = 1
     do {
-      if (!requestLock.readLock().tryLock()) {
+      if (!requestsLock.readLock().tryLock()) {
         logger.info(s"Waiting request execution to unlock for `${request}`.")
-        requestLock.readLock().lock()
+        requestsLock.readLock().lock()
       }
       val response = try {
         logger.info(
@@ -43,7 +61,7 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
         logger.info(s"Executing request `${request}`. Attempt `$i`.")
         Try(httpClient.execute(request))
       } finally {
-        requestLock.readLock().unlock()
+        requestsLock.readLock().unlock()
       }
       try {
         enrichment = processResponse(response)(request, i)
@@ -63,6 +81,14 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
     EntityUtils.toString(response.getEntity, StandardCharsets.UTF_8)
   }
 
+  /** Handles the enrichment request response. The default implementation consumes and returns response body.
+    *
+    * @param response request response, or error.
+    * @param request source request.
+    * @param i a current request attempt, starting from 1.
+    * @return [[Some]] if processing succeeded, [[None]] otherwise. If [[None]] is returned,
+    *         [[requestEnrichment]] re-queues the request.
+    */
   protected def processResponse(response: Try[CloseableHttpResponse])(request: HttpUriRequest,
                                                                       i: Int): Option[String] = {
     Option(consumeResponse(response.get))
@@ -76,14 +102,17 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
         s" Response status line `$statusLine`, body `$body`")
   }
 
+  /** Locks [[requestEnrichment]] methods invocation for [[pauseTimeMs]] period. */
   protected def pauseRequests(pauseTimeMs: Long): Unit = {
+    // block other threads from entering sleep section.
     if (requestPauseLock.tryLock()) {
-      requestLock.writeLock().lock()
+      // block other threads from sending the requests
+      requestsLock.writeLock().lock()
       logger.warn(s"Pausing requests execution for ${pauseTimeMs} ms.")
       try {
         Thread.sleep(pauseTimeMs)
       } finally {
-        requestLock.writeLock().unlock()
+        requestsLock.writeLock().unlock()
         requestPauseLock.unlock()
       }
     } else {
@@ -92,6 +121,7 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
   }
 
   protected def pauseRequestsAndRetry(request: HttpUriRequest, pauseTimeMs: Long) = {
+    // TODO: move log operation or rename the method?
     logger.warn(s"API limit exceeded on request `${request}`.")
     pauseRequests(pauseTimeMs)
     Option.empty[String]
@@ -99,9 +129,12 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
 
 }
 
+/** An mixin that plugs in a connection pool HTTP client to the Enricher.
+  * The client initialization is lazy to be compatible with spark tasks execution model.
+  */
 trait ParallelRemoteHttpEnricher[In, Out] extends RemoteHttpEnricher[In, Out] {
-  // The value must be equal to `spark.task.cpus`, cause a new object will be created for each task.
-  // Spark default value is 1
+  // Note that spark spawns a new enricher instance for each task. Each task operates by `spark.task.cpus`
+  // cores (default value is 1). Making the actual parallelism = `concurrentConnections` * `spark tasks`
   protected def concurrentConnections: Int = 1
 
   protected def remoteHostConnectTimeout: Int
@@ -126,6 +159,11 @@ trait ParallelRemoteHttpEnricher[In, Out] extends RemoteHttpEnricher[In, Out] {
   }
 }
 
+/** An [[RemoteHttpEnricher]] proxy to work with [[Dataset]]s.
+  * The [[singleTaskRps]] requests RPS is further divided between enricher object,
+  * initialized on the executors based on a number of concurrent tasks that will be spawned for the
+  * [[Dataset]] processing
+  */
 class RemoteHttpDfEnricher[In, Out](enricherSummoner: Option[Double] => RemoteHttpEnricher[In, Out],
                                     singleTaskRps: Option[Double]) {
 
@@ -137,6 +175,7 @@ class RemoteHttpDfEnricher[In, Out](enricherSummoner: Option[Double] => RemoteHt
     val adjusterRps =
       singleTaskRps.map(v => v / Math.max(ds.rdd.getNumPartitions, SparkSession.active.sparkContext.defaultParallelism))
     val enricher = enricherSummoner(adjusterRps)
+    // cache the result to avoid repeating HTTP requests on Dataset recalculation
     ds.map(enricher.enrich, outEncoder).cache()
   }
 }

@@ -4,6 +4,9 @@ import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedPr
 
 import java.sql.Timestamp
 
+/** Represents a minimal vocabulary record ([[normalizedText]] + [[definition]]) enriched with
+  * non-essential PocketBook and [[WordDefinitionApi]] attributes.
+  */
 case class DefinedText(
     text: String,
     books: Seq[String],
@@ -24,7 +27,8 @@ object DefinedText extends ApplicationManagedProductCompanion[DefinedText] {
   implicit val silverAreaDescriptor: this.type = this
 
   val TEXT = "text"
-  val pk   = Seq(TEXT)
+  // FIXME: it is not a PK
+  val pk = Seq(TEXT)
 
   val BOOKS             = "books"
   val OCCURRENCES       = "occurrences"
@@ -56,7 +60,8 @@ object DefinedText extends ApplicationManagedProductCompanion[DefinedText] {
 
 }
 
-// TODO: enum?
+// TODO: Where does this list comes from? Compare parts of speech from the dictionary with this mapping
+/** All possible [[DefinedText.PART_OF_SPEECH]] values, produced by [[DictionaryApiDevWordDefiner]]. */
 object PartOfSpeech {
   val NOUN              = "noun"
   val VERB              = "verb"
@@ -71,6 +76,6 @@ object PartOfSpeech {
   val INFINITIVE_MARKER = "infinitive marker"
   val EXCLAMATION       = "exclamation"
   // this parts of speech were unseen in the requests, but we keep them just in case
-  val POSTPOSITION      = "postposition"
-  val ARTICLE           = "article"
+  val POSTPOSITION = "postposition"
+  val ARTICLE      = "article"
 }

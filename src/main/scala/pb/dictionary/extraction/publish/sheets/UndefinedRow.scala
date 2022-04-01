@@ -1,9 +1,8 @@
 package pb.dictionary.extraction.publish.sheets
 
-import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedProductCompanion, ProductCompanion}
+import pb.dictionary.extraction.ProductCompanion
 
-import java.sql.Timestamp
-
+/** Represents a PocketBook text highlight token that wasn't enriched by the definition automatically. */
 case class UndefinedRow(
     text: String,
     books: String,

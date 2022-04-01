@@ -3,25 +3,24 @@ package pb.dictionary.extraction
 import grizzled.slf4j.Logger
 import org.apache.spark.sql.SparkSession
 import pb.dictionary.extraction.bronze.BronzeArea
-import pb.dictionary.extraction.device.DeviceHighlightsDb
+import pb.dictionary.extraction.device.PocketBookMarksArea
 import pb.dictionary.extraction.golden.GoldenArea
 import pb.dictionary.extraction.publish.sheets.{SheetsManualEnrichmentArea, SheetsPublishArea}
 import pb.dictionary.extraction.silver.SilverArea
 import pb.dictionary.extraction.stage.StageArea
 
-// TODO: add documentation and comments
 // TODO: transform to web app on Google? on Azure? with managed identity usage
 object App {
   private val logger = Logger(getClass)
 
   private val GOOGLE_CREDENTIALS_FILE_PATH = "conf/credentials/google_service.json"
 
-  protected[extraction] val SourceDbPath    = "D:/system/config/books.db"
-  protected[extraction] val StageAreaPath   = "dictionary/stage"
-  protected[extraction] val BronzeAreaPath  = "dictionary/bronze"
-  protected[extraction] val SilverAreaPath  = "dictionary/silver"
-  protected[extraction] val GoldenAreaPath  = "dictionary/golden"
-  protected[extraction] val CsvPublishPath  = "dictionary/csvPublish"
+  protected[extraction] val SourceDbPath   = "D:/system/config/books.db"
+  protected[extraction] val StageAreaPath  = "dictionary/stage"
+  protected[extraction] val BronzeAreaPath = "dictionary/bronze"
+  protected[extraction] val SilverAreaPath = "dictionary/silver"
+  protected[extraction] val GoldenAreaPath = "dictionary/golden"
+  protected[extraction] val CsvPublishPath = "dictionary/csvPublish"
 //  protected[extraction] val GoogleSheetPath = "English_dev/Vocabulary_dev/Main"
 
   def main(args: Array[String]): Unit = {
@@ -44,19 +43,15 @@ object App {
 //    updateDictionary(deviceHighlights, stageArea, bronzeArea, silverArea, goldenArea, googleSheets)
   }
 
-  def updateDictionary(deviceHighlights: DeviceHighlightsDb,
-                       stageArea: StageArea,
-                       bronze: BronzeArea,
-                       silverArea: SilverArea,
-                       goldenArea: GoldenArea,
-                       manualEnrichmentArea: SheetsManualEnrichmentArea,
-                       publisher: SheetsPublishArea) = {
+  def updateGoogleSheets(deviceHighlights: PocketBookMarksArea,
+                         stageArea: StageArea,
+                         bronze: BronzeArea,
+                         silverArea: SilverArea,
+                         goldenArea: GoldenArea,
+                         manualEnrichmentArea: SheetsManualEnrichmentArea,
+                         publisher: SheetsPublishArea) = {
     // TODO: use meanegful names instead of upsert everywhere
-    deviceHighlights.snapshot
-      .transform(df => stageArea.upsert(df))
-      .transform(df => bronze.upsert(df))
-      .transform(df => silverArea.upsert(df))
-      .transform(df => goldenArea.upsert(df))
+    updateInternalDictionary(deviceHighlights, stageArea, bronze, silverArea, goldenArea)
       .transform(df => publisher.upsert(df))
       .transform { publishSnapshot =>
         val silverSnapshot = silverArea.snapshot
@@ -70,5 +65,18 @@ object App {
 //        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
 //      }
   }
+
+  def updateInternalDictionary(deviceHighlights: PocketBookMarksArea,
+                               stageArea: StageArea,
+                               bronze: BronzeArea,
+                               silverArea: SilverArea,
+                               goldenArea: GoldenArea) = {
+    deviceHighlights.snapshot
+      .transform(df => stageArea.upsert(df))
+      .transform(df => bronze.upsert(df))
+      .transform(df => silverArea.upsert(df))
+      .transform(df => goldenArea.upsert(df))
+  }
+
 //  SparkSession.active.table("updateDictionary.silver").orderBy(org.apache.spark.sql.functions.col("occurrences").desc).show(false)
 }

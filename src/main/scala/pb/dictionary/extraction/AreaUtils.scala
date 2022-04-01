@@ -8,16 +8,18 @@ import java.io.{File, FileInputStream, FileNotFoundException}
 import java.sql.Timestamp
 import scala.reflect.runtime.universe.TypeTag
 
+/** Methods used across [[Area]] implementations. */
 object AreaUtils {
   // TODO: move to other utility class
-  def fetchCredentialsFile(path: String): FileInputStream = {
+  def fetchFile(path: String): FileInputStream = {
     val credentialsFile = new File(path)
     if (!credentialsFile.exists()) {
       throw new FileNotFoundException(s"Credentials file not found: ${path}")
     }
-   new FileInputStream(credentialsFile)
+    new FileInputStream(credentialsFile)
   }
 
+  /** Select records from [[snapshot]] with [[UPDATED_AT]] timestamp later than the latest timestamp from [[previousSnapshot]]. */
   def findUpdatesByUpdateTimestamp[In <: ApplicationManagedProduct: TypeTag, Out <: ApplicationManagedProduct: TypeTag](
       previousSnapshot: Dataset[Out])(snapshot: Dataset[In]): Dataset[In] = {
     val spark = SparkSession.active
@@ -33,5 +35,5 @@ object AreaUtils {
     snapshot.where(condition)
   }
 
-  def timestampToString(c: Column, format: String = "yyyy-MM-dd HH:mm:ss") = date_format(c, format)
+  def timestampToString(c: Column, format: String = "yyyy-MM-dd HH:mm:ss"): Column = date_format(c, format)
 }

@@ -4,6 +4,7 @@ import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedPr
 
 import java.sql.Timestamp
 
+/** Represents cleansed and normalized PocketBook highlight token. */
 case class CleansedText(
     text: String,
     books: Seq[String],

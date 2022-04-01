@@ -7,6 +7,15 @@ import pb.dictionary.extraction.bronze.CleansedText
 
 import java.sql.Timestamp
 
+// TODO: this should change PK no normalized text + definition
+/** Stores definitions for PocketBook highlight text tokens. [[CleansedText]] records are normalized
+  * and possibly exploded by [[WordDefinitionApi]], primary key is switched to [[DefinedText.pk]] to ensure
+  * uniqueness for words with multiple definitions. PocketBook highlight attributes are duplicated for all the
+  * exploded records.
+  * The goal of this area is to switch from text to definitions. [[DefinedText.pk]] attributes are
+  * a minimal unit, required for words learning vocabulary.
+  * The area stores data in a managed spark metastore table backed by Delta with a [[DefinedText.pk]] primary key.
+  */
 class SilverArea(
     path: String,
     definitionApi: WordDefinitionApi,
@@ -15,16 +24,17 @@ class SilverArea(
   import DefinedText._
   import spark.implicits._
 
-  def upsert(previousSnapshot: Dataset[CleansedText]): Dataset[DefinedText] = {
+  def upsert(bronzeSnapshot: Dataset[CleansedText]): Dataset[DefinedText] = {
     val (existingDefinitions, undefinedEntries) = findUndefined(
-      AreaUtils.findUpdatesByUpdateTimestamp(snapshot)(previousSnapshot))
+      AreaUtils.findUpdatesByUpdateTimestamp(snapshot)(bronzeSnapshot))
     val newDefinitions = definitionApi.define(undefinedEntries)
     val allUpdates     = buildUpdateDf(existingDefinitions, newDefinitions)
     updateArea(allUpdates)
   }
 
-  private def findUndefined(bronze: Dataset[CleansedText]) = {
-    val cachedBronze    = bronze.cache()
+  /** Returns text without definition, both new and already stored in the [[SilverArea]], to retry definition query. */
+  private def findUndefined(bronzeUpdates: Dataset[CleansedText]) = {
+    val cachedBronze    = bronzeUpdates.cache()
     val cachedSilver    = snapshot.cache()
     val definedSilver   = cachedSilver.where(col(NORMALIZED_TEXT).isNotNull)
     val undefinedSilver = cachedSilver.where(col(NORMALIZED_TEXT).isNull)
@@ -43,10 +53,20 @@ class SilverArea(
     (updatedDefinitions, undefinedEntries)
   }
 
-  private def buildUpdateDf(existingEntries: Dataset[CleansedText], newDefinitions: DataFrame): Dataset[DefinedText] = {
+  /** Combines PocketBook highlight attributes updates with enriched [[WordDefinitionApi]] attributes
+    * to create a single [[DataFrame]] for a atomic Delta MERGE operation
+    *
+    * @param existingSilverEntries updated records, already defined in the [[SilverArea]].
+    *                              Without [[WordDefinitionApi]] populated attributes
+    * @param newDefinitions text either never saved to the [[SilverArea]] or previously saved
+    *                       with definition not found. Enriched tih [[WordDefinitionApi]] attributes
+    * @return A [[DataFrame]] for Delta MERGE operation
+    */
+  private def buildUpdateDf(existingSilverEntries: Dataset[CleansedText],
+                            newDefinitions: DataFrame): Dataset[DefinedText] = {
     val currentTimestamp = timestampProvider()
 
-    val dummyOldDefinitions = existingEntries
+    val dummyOldDefinitions = existingSilverEntries
       .select(
         (
           Seq(lit(currentTimestamp) as UPDATED_AT) ++

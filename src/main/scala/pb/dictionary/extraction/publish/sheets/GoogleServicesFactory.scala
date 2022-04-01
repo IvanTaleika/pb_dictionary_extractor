@@ -10,12 +10,13 @@ import pb.dictionary.extraction.AreaUtils
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+/** Creates clients for Google REST API services. */
 class GoogleServicesFactory(applicationName: String, credentialsFilePath: String) {
   private val JSON_FACTORY   = GsonFactory.getDefaultInstance
   private val HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport
 
   private def createCredentials(scopes: Seq[String]) = { // Load client secrets.
-    val credentialsDescription = AreaUtils.fetchCredentialsFile(credentialsFilePath)
+    val credentialsDescription = AreaUtils.fetchFile(credentialsFilePath)
     try {
       val credentials = GoogleCredentials.fromStream(credentialsDescription).createScoped(scopes.asJava)
       new HttpCredentialsAdapter(credentials)

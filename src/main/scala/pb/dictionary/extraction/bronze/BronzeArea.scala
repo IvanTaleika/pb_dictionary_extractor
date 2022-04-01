@@ -8,16 +8,27 @@ import pb.dictionary.extraction.stage.HighlightedText
 
 import java.sql.Timestamp
 
+/** Stores cleansed distinct text tokens (usually individual words) with a sufficient size
+  * (to eliminate accents and other garbage) from the PocketBook highlight marks.
+  * In case the same token was highlighted several time, highlights info is accumulated.
+  * The goal for the area is to switch operations from PocketBook highlights to text entries by
+  * changing the primary key from a [[HighlightedText.pk]] to a [[CleansedText.pk]]
+  * The area stores data in a managed spark metastore table backed by Delta with a [[CleansedText.pk]] primary key.
+  */
 class BronzeArea(
     path: String,
     timestampProvider: () => Timestamp
 ) extends DeltaArea[CleansedText](path) {
   import CleansedText._
 
-  def upsert(previousSnapshot: Dataset[HighlightedText]): Dataset[CleansedText] = {
-    previousSnapshot.transform(AreaUtils.findUpdatesByUpdateTimestamp(snapshot)).transform(fromStage).transform(updateArea)
+  def upsert(stageSnapshot: Dataset[HighlightedText]): Dataset[CleansedText] = {
+    stageSnapshot
+      .transform(AreaUtils.findUpdatesByUpdateTimestamp(snapshot))
+      .transform(fromStage)
+      .transform(updateArea)
   }
 
+  /** Tokenizes and normalizes PocketBook highlights, changing the PK from an [[HighlightedText.pk]] to a [[CleansedText.pk]]. */
   private def fromStage(stage: Dataset[HighlightedText]): DataFrame = {
     val tokensArrCol = "tokensArr"
     val tokenCol     = "token"
@@ -49,11 +60,13 @@ class BronzeArea(
       )
   }
 
-  private def updateArea(words: DataFrame): Dataset[CleansedText] = {
+  /** Saves distinct text entries, accumulating attributes for duplicates. */
+  private def updateArea(textUpdates: DataFrame): Dataset[CleansedText] = {
     val updateTimestamp = timestampProvider()
-    val mergeDf         = words.withColumn(UPDATED_AT, lit(updateTimestamp)).as(stagingAlias)
+    val mergeDf         = textUpdates.withColumn(UPDATED_AT, lit(updateTimestamp)).as(stagingAlias)
     deltaTable
       .as(tableName)
+      // TODO: replace with pk?
       .merge(mergeDf, colDelta(TEXT) === colStaged(TEXT))
       .whenMatched()
       .update(Map(

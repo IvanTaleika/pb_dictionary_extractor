@@ -6,6 +6,9 @@ import org.apache.spark.sql.types.StructField
 
 import java.sql.Timestamp
 
+/** [[Product]] api extension to enforce [[ApplicationManagedArea]] to specify record update timestamp in
+  * [[ApplicationManagedProductCompanion.UPDATED_AT]] column for traceability and filtering.
+  */
 trait ApplicationManagedProduct extends Product {
 
   def updatedAt: Timestamp

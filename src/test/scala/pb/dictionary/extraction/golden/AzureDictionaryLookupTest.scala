@@ -11,13 +11,12 @@ import pb.dictionary.extraction.golden.AzureDictionaryLookup.{DfEnricher, Dictio
 import pb.dictionary.extraction.golden.AzureDictionaryLookupEnricher.{AZURE_SERVICE_ERROR_RETRY_INTERVAL, MAX_RETRIES}
 import EnricherTestUtils._
 
-import reflect.runtime.universe._
 import java.nio.charset.StandardCharsets
 import scala.reflect.ClassTag
 
 class AzureDictionaryLookupTest extends TestBase {
 
-  import pb.dictionary.extraction.golden.DictionaryRecord._
+  import pb.dictionary.extraction.golden.RichDefinedText._
 
   val sourceSchema = s"$NORMALIZED_TEXT String, $PART_OF_SPEECH String, $FORMS array<string>, $DEFINITION String"
   val finalSchema = s"$sourceSchema, $TRANSLATIONS array<string>"

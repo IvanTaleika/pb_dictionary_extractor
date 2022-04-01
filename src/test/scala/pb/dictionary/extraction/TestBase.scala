@@ -33,14 +33,14 @@ abstract class TestBase
 
   override def conf: SparkConf =
     super.conf
+      // TODO: why 1?
       .setMaster("local[1]")
 //      .setMaster("local[*]")
       .set("spark.sql.session.timeZone", "UTC")
       .set("spark.sql.warehouse.dir", warehousePath)
       .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-      // TODO: remove spark UI
-      .set("spark.ui.enabled", "true")
+      .set("spark.ui.enabled", "false")
       .setAppName(appName)
 
   override def beforeAll(): Unit = {

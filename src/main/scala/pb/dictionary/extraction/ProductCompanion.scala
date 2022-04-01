@@ -6,6 +6,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 import scala.reflect.runtime.universe.TypeTag
 
+/** An utility trait for [[Product]] companion objects */
 abstract class ProductCompanion[T <: Product: TypeTag] {
 
   def schema: StructType = Encoders.product[T].schema
@@ -28,6 +29,16 @@ abstract class ProductCompanion[T <: Product: TypeTag] {
       searchSchema(cn)
   }
 
+  /** import allows syntax such as:
+    *
+    * {{{
+    *   override def snapshot: Dataset[Out] = {
+    *     import areaDescriptor.implicits._
+    *     import spark.implicits._
+    *     spark.table(fullTableName).as[Out]
+    *   }
+    * }}}
+    */
   object implicits {
     // Adding type to this value fails the build ¯\_(ツ)_/¯
     implicit val areaTypeTag = implicitly[TypeTag[T]]

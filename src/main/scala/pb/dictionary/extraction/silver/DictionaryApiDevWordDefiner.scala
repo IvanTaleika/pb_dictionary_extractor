@@ -18,6 +18,11 @@ import java.net.URLEncoder
 import javax.net.ssl.SSLHandshakeException
 import scala.util.Try
 
+/** A definition dictionary API powered by free [[https://dictionaryapi.dev/]] backend
+  * (which itself claims to query [[https://en.wiktionary.org/]]).
+  *
+  * @param dfEnricher a DataFrame wrapper for [[DictionaryApiDevEnricher]]
+  */
 class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDevDfEnricher) extends WordDefinitionApi {
   private val rawDefinitionCol = "rawDefinition"
 
@@ -31,6 +36,7 @@ class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDe
     formattedDf
   }
 
+  /** Parses [[ResponseStructure]] JSON keeping only attributes defined in [[DefinedText]]. */
   private def parseDefinitionJson(df: DataFrame) = {
     import ResponseStructure._
 
@@ -138,6 +144,7 @@ object DictionaryApiDevWordDefiner {
   }
 }
 
+/** Enriches [[CleansedText]] with string column that contains [[ResponseStructure]] JSON. */
 abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(SafeSingleTaskRps))
     extends RemoteHttpEnricher[CleansedText, Row](singleTaskRps) {
   def enrich(cleansedWord: CleansedText): Row = {
@@ -156,10 +163,11 @@ abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(S
       .map { validResponse =>
         validResponse.getStatusLine.getStatusCode match {
           case HttpStatus.SC_OK => super.processResponse(response)(request, i)
-          case SC_TOO_MANY_REQUESTS =>
+          case HttpStatus.SC_TOO_MANY_REQUESTS =>
             pauseRequestsAndRetry(request, TOO_MANY_REQUESTS_PAUSE_TIME_MS)
           case HttpStatus.SC_NOT_FOUND =>
-            // API can return 404 for words with definitions under a heavy load.
+            // Note that API can return 404 for words with definitions under a heavy load.
+            // This is a main reason for SilverArea to retry the definition query for undefined words
             logger.info(s"Could not enrich request ${request}. No definition found")
             Option("")
           case _ =>

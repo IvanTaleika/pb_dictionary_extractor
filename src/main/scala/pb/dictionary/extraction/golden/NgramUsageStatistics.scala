@@ -13,8 +13,17 @@ import pb.dictionary.extraction.silver.PartOfSpeech
 
 import scala.util.Try
 
+/** Enriches defined text with usage frequency calculated as a ratio between request word occurrences
+  * in the Google books and all words in Google books. More information at: [[https://books.google.com/ngrams/info#]].
+  *
+  * The usage statistics is queried with respect to text part of speech, if it is defined. This possibly
+  * leads to the [[RichDefinedText.USAGE]] overestimation for text from unknown part of speech, cause
+  * all the meanings are summed up in this case, regarding how it is used in the sentence.
+  *
+  * @param dfEnricher a DataFrame wrapper for [[NgramEnricher]]
+  */
 class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyApi {
-  private val ngramSearchColNames = Seq(DictionaryRecord.NORMALIZED_TEXT, DictionaryRecord.PART_OF_SPEECH)
+  private val ngramSearchColNames = Seq(RichDefinedText.NORMALIZED_TEXT, RichDefinedText.PART_OF_SPEECH)
   private val ngramSearchCols     = ngramSearchColNames.map(col)
   private val rawEnrichmentCol    = "rawDefinition"
 
@@ -31,7 +40,7 @@ class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyAp
       .as(sourceAlias)
       .join(textBooksUsageDf.as(enrichedAlias),
             ngramSearchColNames.map(cn => col(s"$sourceAlias.$cn") <=> col(s"$enrichedAlias.$cn")).reduce(_ && _))
-      .select(col(s"$sourceAlias.*"), col(DictionaryRecord.USAGE))
+      .select(col(s"$sourceAlias.*"), col(RichDefinedText.USAGE))
     dataBooksUsageDf
   }
 
@@ -53,7 +62,7 @@ class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyAp
         ): _*)
     val textUsageDf = firstLevelExplodedDf
       .groupBy(ngramSearchCols: _*)
-      .agg(avg(NgramUsage.TIMESERIES) as DictionaryRecord.USAGE)
+      .agg(avg(NgramUsage.TIMESERIES) as RichDefinedText.USAGE)
     textUsageDf
   }
 }
@@ -93,9 +102,12 @@ object NgramUsageStatistics {
   }
 }
 
+/** Enriches input record with string column that contains [[ResponseStructure]] JSON. */
 abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
     singleTaskRps: Option[Double] = Option(SafeSingleTaskRps)
 ) extends RemoteHttpEnricher[Row, Row](singleTaskRps) {
+
+  // See `Part-of-speech Tags` section in https://books.google.com/ngrams/info#
   private val partOfSpeechMapping = Map(
     PartOfSpeech.NOUN              -> "NOUN",
     PartOfSpeech.VERB              -> "VERB",
@@ -118,8 +130,8 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
   }
 
   override protected def buildRequest(record: Row) = {
-    val text            = record.getAs[String](DictionaryRecord.NORMALIZED_TEXT)
-    val partOfSpeech    = record.getAs[String](DictionaryRecord.PART_OF_SPEECH)
+    val text            = record.getAs[String](RichDefinedText.NORMALIZED_TEXT)
+    val partOfSpeech    = record.getAs[String](RichDefinedText.PART_OF_SPEECH)
     val partOfSpeechTag = partOfSpeechMapping.get(partOfSpeech).map(v => s"_${v}").getOrElse("")
     val uri = new URIBuilder(NgramUsageStatistics.ApiEndpoint)
       .addParameter("content", s"$text$partOfSpeechTag:$corpus")
@@ -137,7 +149,7 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
     statusLine.getStatusCode match {
       case HttpStatus.SC_OK =>
         super.processResponse(response)(request, i)
-      case SC_TOO_MANY_REQUESTS =>
+      case HttpStatus.SC_TOO_MANY_REQUESTS =>
         pauseRequestsAndRetry(request, TOO_MANY_REQUESTS_PAUSE_TIME_MS)
       case _ =>
         throwUnknownStatusCodeException(request, validResponse)

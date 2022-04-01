@@ -12,6 +12,22 @@ import java.sql.Timestamp
 import java.time.format.DateTimeFormatter
 import scala.collection.JavaConverters._
 
+// TODO: allow schema evolution with only adding columns support?
+/** Provides operation to work with Google spreadsheets data.
+  *
+  * The class expects an already created spreadsheet with the following properties:
+  *
+  *   - target sheet contains data starting from the A1 cell
+  *   - the first row is populated with column names from [[Out]]
+  *   - number of columns matches [[Out]] exactly
+  *     (there are no garbage data in the columns outside the [[Out]] schema columns)
+  *   - all rows starting from 2 (inclusive) are populated with data
+  *   - columns data can be casted to the [[Out]] data types.
+  *     List of supported data types can be seen in `snapshot` method implementation
+  *
+  *  The [[Area.path]] must specify a path to a data sheet in the following format
+  * [drive_folders]/[spreadsheet_file_name]/[sheet_name]
+  */
 abstract class GoogleSheetsArea[Out <: Product: ProductCompanion] extends Area[Out] {
   import spark.implicits._
   import areaDescriptor.implicits._
@@ -35,6 +51,7 @@ abstract class GoogleSheetsArea[Out <: Product: ProductCompanion] extends Area[O
   protected val spreadsheetDirectory                             = spreadsheetPath.getParent.toString
   protected val (spreadsheetDirectoryId, spreadsheetId, sheetId) = connectToTheSpreadsheet()
 
+  /** Returns data from the whole target sheet. The method perform schema validation and types cast. */
   override def snapshot: Dataset[Out] = {
     val sheetDataRange = s"${sheetName}!A:${lastSheetIndex}"
     val sheetData      = querySheetData(spreadsheetId, sheetDataRange)
@@ -70,6 +87,7 @@ abstract class GoogleSheetsArea[Out <: Product: ProductCompanion] extends Area[O
     spark.createDataFrame(spark.sparkContext.parallelize(castedData.map(r => Row.fromSeq(r))), schema).as[Out]
   }
 
+  /** Resolves IDs of Google cloud objects. */
   private def connectToTheSpreadsheet() = {
     val directoryId      = queryDirectoryId(spreadsheetDirectory)
     val spreadsheetId    = querySpreadsheetId(spreadsheetName, directoryId)
@@ -140,11 +158,21 @@ abstract class GoogleSheetsArea[Out <: Product: ProductCompanion] extends Area[O
 
   private def listDriveFiles() = driveService.files().list().setSpaces("drive")
 
+  /** Runs [[write]] Seq version, running [[Dataset.collect()]] on the `postUpsertSnapshot`. */
   protected def write(preUpsertSnapshot: Dataset[Out], postUpsertSnapshot: Dataset[Out]): Dataset[Out] = {
     // DF can be transformed to DS regarding the column order. Collected DS is always in the same order as its Product type
     write(preUpsertSnapshot, postUpsertSnapshot.collect().toSeq)
   }
 
+  /** Runs a transactional data write that includes following operations is sequence:
+    *
+    *   - Backups current target sheet if [[nBackupSheetsToKeep]] is > 0
+    *   - Clears the oldest obsolete backup sheets if their number is > [[nBackupSheetsToKeep]]
+    *   - Explicitly expands the main sheet to fit new data
+    *   - Override the target sheet with new data
+    *
+    *  In case any of the operation fails, nothing is applied.
+    */
   protected def write(preUpsertSnapshot: Dataset[Out], postUpsertSnapshot: Seq[Out]): Dataset[Out] = {
     logger.info(s"Creating requests for transactional backup and write on the spreadsheet `$path`")
 
@@ -169,9 +197,10 @@ abstract class GoogleSheetsArea[Out <: Product: ProductCompanion] extends Area[O
   }
 
   private def createBackupSheetRequests(nExistingSheets: Int) = {
-    if(nBackupSheetsToKeep > 0) {
+    if (nBackupSheetsToKeep > 0) {
       val currentTimestamp = timestampProvider()
-      val sheetNameTimestamp = currentTimestamp.toLocalDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss"))
+      val sheetNameTimestamp =
+        currentTimestamp.toLocalDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss"))
       val backupSheetName = s"$backupSheetPrefix${sheetNameTimestamp}"
 
       val backupSheetRequest = new Request().setDuplicateSheet(

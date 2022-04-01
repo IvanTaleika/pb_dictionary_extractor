@@ -2,6 +2,7 @@ package pb.dictionary.extraction.publish.sheets
 
 import pb.dictionary.extraction.publish.{FinalPublishProduct, FinalPublishProductCompanion}
 
+/** Represents a Google sheet row that correspond to a single vocabulary entry. */
 case class VocabularyRow(
     id: Int,
     status: String, // new / in progress / learned
