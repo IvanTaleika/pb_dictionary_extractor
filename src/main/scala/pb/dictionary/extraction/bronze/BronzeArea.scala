@@ -3,8 +3,9 @@ package pb.dictionary.extraction.bronze
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
-import pb.dictionary.extraction.{AreaUtils, DeltaArea}
+import pb.dictionary.extraction.DeltaArea
 import pb.dictionary.extraction.stage.HighlightedText
+import pb.dictionary.extraction.utils.AreaUtils
 
 import java.sql.Timestamp
 
@@ -66,8 +67,7 @@ class BronzeArea(
     val mergeDf         = textUpdates.withColumn(UPDATED_AT, lit(updateTimestamp)).as(stagingAlias)
     deltaTable
       .as(tableName)
-      // TODO: replace with pk?
-      .merge(mergeDf, colDelta(TEXT) === colStaged(TEXT))
+      .merge(mergeDf, mergePkMatches)
       .whenMatched()
       .update(Map(
         BOOKS             -> array_union(colStaged(BOOKS), colDelta(BOOKS)),

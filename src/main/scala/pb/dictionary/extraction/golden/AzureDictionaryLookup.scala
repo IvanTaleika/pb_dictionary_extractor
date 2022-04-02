@@ -68,6 +68,7 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
                    PartOfSpeech.POSTPOSITION)
   ).mapValues(_.mkString(","))
 
+  // We can send in batches to reduce quota usage. Current approach simplifies testing.
   def translate(goldenUpdates: DataFrame): DataFrame = {
     val spark = SparkSession.active
     import spark.implicits._
@@ -96,7 +97,7 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
         ArrayType(Encoders.product[ResponseStructure.DictionaryLookup].schema)
       )
     )
-    // TODO: Should in be just 1 to 1, cause we sent only 1 word?
+
     val zeroLevelExplodedDf = parsedDefinitionDf
       .select((sourceCols :+ explode_outer(col(parsedResponseCol)).as(parsedResponseCol)): _*)
 
@@ -340,8 +341,7 @@ abstract class AzureDictionaryLookupEnricher(
           s"$azureFailurePrefix " +
             s"Pausing requests execution for `${AZURE_SERVICE_ERROR_RETRY_INTERVAL}` ms before retrying. " +
             s"Current attempt was `$i` from `$MAX_RETRIES`")
-        pauseRequests(AZURE_SERVICE_ERROR_RETRY_INTERVAL)
-        Option.empty[String]
+        pauseRequestsAndRetry(AZURE_SERVICE_ERROR_RETRY_INTERVAL)
       } else {
         val errorMessage =
           s"$azureFailurePrefix Aborting execution with the latest exception after `${i - 1}` retries."

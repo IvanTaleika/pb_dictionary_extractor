@@ -2,8 +2,9 @@ package pb.dictionary.extraction.silver
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.{AreaUtils, DeltaArea}
+import pb.dictionary.extraction.DeltaArea
 import pb.dictionary.extraction.bronze.CleansedText
+import pb.dictionary.extraction.utils.AreaUtils
 
 import java.sql.Timestamp
 
@@ -83,7 +84,7 @@ class SilverArea(
   private def updateArea(updates: Dataset[DefinedText]): Dataset[DefinedText] = {
     deltaTable
       .as(tableName)
-      .merge(updates.toDF().as(stagingAlias), colDelta(TEXT) === colStaged(TEXT))
+      .merge(updates.toDF().as(stagingAlias), mergePkMatches)
       .whenMatched(colStaged(NORMALIZED_TEXT).isNull)
       .update((propagatingAttributes :+ UPDATED_AT).map(c => c -> colStaged(c)).toMap)
       .whenMatched(colStaged(NORMALIZED_TEXT).isNotNull)

@@ -12,7 +12,6 @@ import pb.dictionary.extraction.golden.AzureDictionaryLookupEnricher.{AZURE_SERV
 import EnricherTestUtils._
 
 import java.nio.charset.StandardCharsets
-import scala.reflect.ClassTag
 
 class AzureDictionaryLookupTest extends TestBase {
 
@@ -644,8 +643,8 @@ class AzureDictionaryLookupTest extends TestBase {
       )
       val translationClient = new AzureDictionaryLookup(new DfEnricher(testClient))
       val actual = the[SparkException] thrownBy translationClient.translate(df).collect()
-      assertCausedBy[RemoteHttpEnrichmentException](actual)
-      actual.getMessage should include("empty body")
+      val actualCause = assertCausedBy[RemoteHttpEnrichmentException](actual)
+      actualCause.getMessage should include("empty body")
     }
 
     it("when API response with error code and an unparsable Azure error") {
@@ -661,8 +660,8 @@ class AzureDictionaryLookupTest extends TestBase {
       )
       val translationClient = new AzureDictionaryLookup(new DfEnricher(testClient))
       val actual = the[SparkException] thrownBy translationClient.translate(df).collect()
-      assertCausedBy[RemoteHttpEnrichmentException](actual)
-      actual.getMessage should include(s"`${errorString}`")
+      val actualCause = assertCausedBy[RemoteHttpEnrichmentException](actual)
+      actualCause.getMessage should include(s"`${errorString}`")
     }
 
     it("when API response with `40000` Azure error") {
@@ -688,9 +687,9 @@ class AzureDictionaryLookupTest extends TestBase {
       )
       val translationClient = new AzureDictionaryLookup(new DfEnricher(testClient))
       val actual = the[SparkException] thrownBy translationClient.translate(df).collect()
-      assertCausedBy[RemoteHttpEnrichmentException](actual)
-      actual.getMessage should include(s"`$azureErrorCode`")
-      actual.getMessage should include(s"`$azureErrorMessage`")
+      val actualCause = assertCausedBy[RemoteHttpEnrichmentException](actual)
+      actualCause.getMessage should include(s"`$azureErrorCode`")
+      actualCause.getMessage should include(s"`$azureErrorMessage`")
     }
 
     it(s"when API response with `50000` Azure error after `${MAX_RETRIES}` retries of `$AZURE_SERVICE_ERROR_RETRY_INTERVAL` retry interval") {
@@ -721,27 +720,14 @@ class AzureDictionaryLookupTest extends TestBase {
       val endTime = System.currentTimeMillis()
       val elapsedTime = endTime - startTime
 
-      assertCausedBy[RemoteHttpEnrichmentException](actual)
-      actual.getMessage should include(s"`$azureErrorCode`")
-      actual.getMessage should include(s"`$azureErrorMessage`")
-      actual.getMessage should include(s"`$MAX_RETRIES` retries")
+      val actualCause = assertCausedBy[RemoteHttpEnrichmentException](actual)
+      actualCause.getMessage should include(s"`$azureErrorCode`")
+      actualCause.getMessage should include(s"`$azureErrorMessage`")
+      actualCause.getMessage should include(s"`$MAX_RETRIES` retries")
       Mockito.verify(testClient.httpClient, Mockito.atMost(MAX_RETRIES)).execute(ArgumentMatchers.any())
 
       elapsedTime should be > (MAX_RETRIES * AZURE_SERVICE_ERROR_RETRY_INTERVAL).toLong
 
-    }
-  }
-
-  def assertCausedBy[T <: Throwable](exception: Throwable)(implicit causeClass: ClassTag[T]): Unit = {
-    var currentException = exception
-    var isCausedBy = false
-
-    while (!isCausedBy) {
-      currentException match {
-        case null => fail(s"No `${causeClass.toString()}` exception was found in the cause chain for `$exception`")
-        case e if causeClass.runtimeClass.isInstance(e) => isCausedBy = true
-        case _ => currentException = exception.getCause
-      }
     }
   }
 }

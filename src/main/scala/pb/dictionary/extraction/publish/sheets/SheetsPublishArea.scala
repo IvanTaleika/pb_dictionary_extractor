@@ -5,9 +5,9 @@ import com.google.api.services.sheets.v4.Sheets
 import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.AreaUtils
 import pb.dictionary.extraction.golden.RichDefinedText
 import pb.dictionary.extraction.golden.RichDefinedText._
+import pb.dictionary.extraction.utils.AreaUtils
 
 import java.sql.Timestamp
 import java.util.regex.Pattern
@@ -35,8 +35,8 @@ class SheetsPublishArea(
 
   protected val arrayRecordsSeparator = "\n* "
 
-  /** Upsert records from lower tier area by PK and returns new records. */
-  def upsert(previousSnapshot: Dataset[RichDefinedText]): Dataset[VocabularyRow] = {
+  /** Merges updates from the [[pb.dictionary.extraction.golden.GoldenArea]] with user sheet changes. */
+  def merge(previousSnapshot: Dataset[RichDefinedText]): Dataset[VocabularyRow] = {
     val preUpsertSnapshot = snapshot.cache()
     previousSnapshot.transform(fromGolden(preUpsertSnapshot)).transform(write(preUpsertSnapshot, _))
   }

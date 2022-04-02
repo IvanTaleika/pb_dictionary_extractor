@@ -150,7 +150,8 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
       case HttpStatus.SC_OK =>
         super.processResponse(response)(request, i)
       case HttpStatus.SC_TOO_MANY_REQUESTS =>
-        pauseRequestsAndRetry(request, TOO_MANY_REQUESTS_PAUSE_TIME_MS)
+        logger.warn(s"API limit exceeded on request `${request}`.")
+        pauseRequestsAndRetry(TOO_MANY_REQUESTS_PAUSE_TIME_MS)
       case _ =>
         throwUnknownStatusCodeException(request, validResponse)
     }

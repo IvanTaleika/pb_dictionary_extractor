@@ -5,7 +5,7 @@ import com.google.api.client.googleapis.services.json.AbstractGoogleJsonClient
 import com.google.api.client.json.gson.GsonFactory
 import com.google.auth.http.HttpCredentialsAdapter
 import com.google.auth.oauth2.GoogleCredentials
-import pb.dictionary.extraction.AreaUtils
+import pb.dictionary.extraction.utils.{AreaUtils, FileUtils}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -16,7 +16,7 @@ class GoogleServicesFactory(applicationName: String, credentialsFilePath: String
   private val HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport
 
   private def createCredentials(scopes: Seq[String]) = { // Load client secrets.
-    val credentialsDescription = AreaUtils.fetchFile(credentialsFilePath)
+    val credentialsDescription = FileUtils.connectToFile(credentialsFilePath)
     try {
       val credentials = GoogleCredentials.fromStream(credentialsDescription).createScoped(scopes.asJava)
       new HttpCredentialsAdapter(credentials)

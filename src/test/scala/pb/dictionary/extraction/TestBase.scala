@@ -1,23 +1,20 @@
 package pb.dictionary.extraction
 
-import com.holdenkarau.spark.testing.{DataFrameSuiteBase, DatasetSuiteBase}
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import grizzled.slf4j.Logger
-import org.apache.http.{HttpHost, HttpRequest}
-import org.apache.http.client.methods.CloseableHttpResponse
-import org.apache.http.impl.client.CloseableHttpClient
-import org.apache.http.protocol.HttpContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.types.{ArrayType, StructField, StructType}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions.{array_sort, col}
 import org.mockito.ArgumentMatchers
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.{AppendedClues, BeforeAndAfterAll, BeforeAndAfterEach, FunSpec, Matchers}
+import org.scalatest._
 
 import java.io.File
 import java.sql.Timestamp
 import java.time.ZonedDateTime
 import scala.reflect.io.Directory
+import scala.reflect.ClassTag
 
 abstract class TestBase
     extends FunSpec
@@ -33,9 +30,7 @@ abstract class TestBase
 
   override def conf: SparkConf =
     super.conf
-      // TODO: why 1?
-      .setMaster("local[1]")
-//      .setMaster("local[*]")
+      .setMaster("local[*]")
       .set("spark.sql.session.timeZone", "UTC")
       .set("spark.sql.warehouse.dir", warehousePath)
       .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
@@ -90,4 +85,19 @@ abstract class TestBase
       assertDataFrameDataInColumnsEqual(actual.toDF(), expected.toDF())
       true
     })
+
+
+  def assertCausedBy[T <: Throwable](exception: Throwable)(implicit causeClass: ClassTag[T]): T = {
+    var currentException = exception
+    var isCausedBy = false
+
+    while (!isCausedBy) {
+      currentException match {
+        case null => fail(s"No `${causeClass.toString()}` exception was found in the cause chain for `$exception`")
+        case e if causeClass.runtimeClass.isInstance(e) => isCausedBy = true
+        case _ => currentException = currentException.getCause
+      }
+    }
+    currentException.asInstanceOf[T]
+  }
 }

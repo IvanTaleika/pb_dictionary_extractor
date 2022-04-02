@@ -2,6 +2,7 @@ package pb.dictionary.extraction
 
 import grizzled.slf4j.Logger
 import org.apache.spark.sql._
+import pb.dictionary.extraction.sql.functions._
 import org.apache.spark.sql.types.StructType
 import pb.dictionary.extraction.ApplicationManagedProduct._
 
@@ -78,11 +79,11 @@ import io.delta.tables.DeltaTable
 /** An [[ApplicationManagedArea]] backed by the Delta format. */
 abstract class DeltaArea[Out <: ApplicationManagedProduct: ApplicationManagedProductCompanion](path: String)
     extends ApplicationManagedArea[Out](path, "delta") {
-  protected def deltaTable                                   = DeltaTable.forPath(absoluteTablePath)
-  protected def stagingAlias                                 = "staging"
-  protected def colFromTable(tableAlias: String)(cn: String) = col(s"$tableAlias.$cn")
-  protected def colDelta(cn: String)                         = colFromTable(tableName)(cn)
-  protected def colStaged(cn: String)                        = colFromTable(stagingAlias)(cn)
+  protected def deltaTable            = DeltaTable.forPath(absoluteTablePath)
+  protected def stagingAlias          = "staging"
+  protected def colDelta(cn: String)  = colFromTable(tableName)(cn)
+  protected def colStaged(cn: String) = colFromTable(stagingAlias)(cn)
+  protected def mergePkMatches        = areaDescriptor.pkMatches(tableName, stagingAlias)
 }
 
 /** An [[ApplicationManagedArea]] backed by the CSV format. */

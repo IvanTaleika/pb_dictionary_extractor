@@ -120,11 +120,9 @@ abstract class RemoteHttpEnricher[In, Out](protected val maxRequestsPerSecond: O
     }
   }
 
-  protected def pauseRequestsAndRetry(request: HttpUriRequest, pauseTimeMs: Long) = {
-    // TODO: move log operation or rename the method?
-    logger.warn(s"API limit exceeded on request `${request}`.")
+  protected def pauseRequestsAndRetry(pauseTimeMs: Long): Option[Nothing] = {
     pauseRequests(pauseTimeMs)
-    Option.empty[String]
+    None
   }
 
 }

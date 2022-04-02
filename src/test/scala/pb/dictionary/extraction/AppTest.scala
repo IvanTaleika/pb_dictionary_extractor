@@ -2,7 +2,6 @@ package pb.dictionary.extraction
 
 import com.google.api.services.drive.{Drive, DriveScopes}
 import com.google.api.services.sheets.v4.{Sheets, SheetsScopes}
-import org.apache.commons.io.IOUtils
 import org.apache.spark.sql.Encoders
 import org.scalatest.tags.Slow
 import pb.dictionary.extraction.bronze.BronzeArea
@@ -11,8 +10,8 @@ import pb.dictionary.extraction.golden._
 import pb.dictionary.extraction.publish.sheets.{GoogleServicesFactory, SheetsManualEnrichmentArea, SheetsPublishArea}
 import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
+import pb.dictionary.extraction.utils.FileUtils
 
-import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.{ZonedDateTime, ZoneOffset}
 
@@ -50,15 +49,7 @@ class AppTest extends TestBase {
       val spreadsheetsService   = googleServicesFactory.create[Sheets](SheetsScopes.SPREADSHEETS)
 
       // TOOD: create factory for azure resources
-      val azureDictionaryTranslation = {
-        val credentialsFile = AreaUtils.fetchFile(AZURE_TRANSLATOR_CREDENTIALS_FILE_PATH)
-        try {
-          val key = IOUtils.toString(credentialsFile, StandardCharsets.UTF_8)
-          AzureDictionaryLookup(key)
-        } finally {
-          credentialsFile.close()
-        }
-      }
+      val azureDictionaryTranslation = AzureDictionaryLookup(FileUtils.readToString(AZURE_TRANSLATOR_CREDENTIALS_FILE_PATH))
 
       val sampleFile = this.getClass.getResource("deviceHighlightsSample.csv").getPath
 

@@ -48,14 +48,13 @@ object App {
                          bronze: BronzeArea,
                          silverArea: SilverArea,
                          goldenArea: GoldenArea,
-                         manualEnrichmentArea: SheetsManualEnrichmentArea,
-                         publisher: SheetsPublishArea) = {
-    // TODO: use meanegful names instead of upsert everywhere
+                         sheetsManualEnrichmentArea: SheetsManualEnrichmentArea,
+                         sheetsPublisher: SheetsPublishArea) = {
     updateInternalDictionary(deviceHighlights, stageArea, bronze, silverArea, goldenArea)
-      .transform(df => publisher.upsert(df))
+      .transform(df => sheetsPublisher.merge(df))
       .transform { publishSnapshot =>
         val silverSnapshot = silverArea.snapshot
-        manualEnrichmentArea.upsert(silverSnapshot, publishSnapshot)
+        sheetsManualEnrichmentArea.rewrite(silverSnapshot, publishSnapshot)
       }
 
 //    goldenArea.snapshot

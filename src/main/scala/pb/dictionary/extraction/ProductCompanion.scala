@@ -1,8 +1,9 @@
 package pb.dictionary.extraction
 
 import org.apache.spark.sql.{Column, Encoders}
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
+import pb.dictionary.extraction.sql.functions._
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -22,6 +23,9 @@ abstract class ProductCompanion[T <: Product: TypeTag] {
   def pkFields: Seq[StructField]         = pk.map(colParameters)
   def attributesFields: Seq[StructField] = attributes.map(colParameters)
   def metadataFields: Seq[StructField]   = metadata.map(colParameters)
+
+  def pkMatches(t1: String, t2: String) =
+    pk.map(cn => colFromTable(t1)(cn) === colFromTable(t2)(cn)).foldLeft(lit(true))(_ && _)
 
   protected lazy val colParameters = {
     val searchSchema = schema.map(dt => dt.name -> dt).toMap

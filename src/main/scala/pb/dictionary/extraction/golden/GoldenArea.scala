@@ -4,8 +4,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
-import pb.dictionary.extraction.{AreaUtils, DeltaArea}
+import pb.dictionary.extraction.DeltaArea
 import pb.dictionary.extraction.silver.DefinedText
+import pb.dictionary.extraction.utils.AreaUtils
 
 import java.sql.Timestamp
 
@@ -22,9 +23,6 @@ class GoldenArea(
 ) extends DeltaArea[RichDefinedText](path) {
   import RichDefinedText._
   import spark.implicits._
-
-  private def pkMatches(t1: String, t2: String) =
-    pk.map(cn => colFromTable(t1)(cn) === colFromTable(t2)(cn)).reduce(_ && _)
 
   def upsert(silverSnapshot: Dataset[DefinedText]): Dataset[RichDefinedText] = {
     import spark.implicits._
@@ -95,7 +93,7 @@ class GoldenArea(
   private[golden] def updateArea(updates: Dataset[RichDefinedText]): Dataset[RichDefinedText] = {
     deltaTable
       .as(tableName)
-      .merge(updates.toDF().as(stagingAlias), pkMatches(tableName, stagingAlias))
+      .merge(updates.toDF().as(stagingAlias), mergePkMatches)
       .whenMatched()
       .update((propagatingAttributes :+ UPDATED_AT).map(c => c -> colStaged(c)).toMap)
       .whenNotMatched()

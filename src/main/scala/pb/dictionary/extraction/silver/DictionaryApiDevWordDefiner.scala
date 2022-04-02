@@ -164,7 +164,8 @@ abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(S
         validResponse.getStatusLine.getStatusCode match {
           case HttpStatus.SC_OK => super.processResponse(response)(request, i)
           case HttpStatus.SC_TOO_MANY_REQUESTS =>
-            pauseRequestsAndRetry(request, TOO_MANY_REQUESTS_PAUSE_TIME_MS)
+            logger.warn(s"API limit exceeded on request `${request}`.")
+            pauseRequestsAndRetry(TOO_MANY_REQUESTS_PAUSE_TIME_MS)
           case HttpStatus.SC_NOT_FOUND =>
             // Note that API can return 404 for words with definitions under a heavy load.
             // This is a main reason for SilverArea to retry the definition query for undefined words
@@ -183,8 +184,7 @@ abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(S
           if (i < MAX_RETRIES) {
             logger.warn(
               s"Pausing requests execution before retrying the request `${request}`. Current attempt was `$i` from `$MAX_RETRIES`")
-            pauseRequests(TOO_MANY_REQUESTS_PAUSE_TIME_MS)
-            None
+            pauseRequestsAndRetry(TOO_MANY_REQUESTS_PAUSE_TIME_MS)
           } else {
             val errorMessage =
               s"Failed to execute request `${request}` in `$MAX_RETRIES` attempts. " +

@@ -4,9 +4,9 @@ import com.google.api.services.drive.Drive
 import com.google.api.services.sheets.v4.Sheets
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.AreaUtils
 import pb.dictionary.extraction.publish.FinalPublishProduct
 import pb.dictionary.extraction.silver.DefinedText
+import pb.dictionary.extraction.utils.AreaUtils
 
 import java.sql.Timestamp
 
@@ -30,7 +30,7 @@ class SheetsManualEnrichmentArea(
   import UndefinedRow._
   import spark.implicits._
 
-  def upsert[T <: FinalPublishProduct](
+  def rewrite[T <: FinalPublishProduct](
       silverSnapshot: Dataset[DefinedText],
       publishSnapshot: Dataset[T]
   ): Dataset[UndefinedRow] = {
