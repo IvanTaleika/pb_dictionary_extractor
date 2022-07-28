@@ -10,14 +10,14 @@ import pb.dictionary.extraction.silver.DefinedText
 
 
 class GoldenAreaTest extends ApplicationManagedAreaTestBase {
-  import RichDefinedText._
+  import VocabularyRecord._
   var preMergeSchema: StructType   = _
   var preMergeSchemaDdl: String    = _
   var fromSilverSchema: StructType = _
   var fromSilverSchemaDdl: String  = _
   override def beforeAll() = {
     super.beforeAll()
-    preMergeSchema    = StructType(Encoders.product[RichDefinedText].schema.filterNot(_.name == UPDATED_AT))
+    preMergeSchema    = StructType(Encoders.product[VocabularyRecord].schema.filterNot(_.name == UPDATED_AT))
     preMergeSchemaDdl = preMergeSchema.toDDL
     fromSilverSchema = StructType(
       preMergeSchema.filterNot {
@@ -182,7 +182,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
 
       val goldenSnapshot = spark.createDataset(
         Seq(
-          RichDefinedText(
+          VocabularyRecord(
             "die hard",
             null,
             null,
@@ -199,7 +199,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option(1d),
             t"2020-01-01T00:00:00Z",
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "diehard",
             "noun",
             "ˈdʌɪhɑːd",
@@ -254,7 +254,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
 
       val expectedAreaUpdates = spark.createDataset(
         Seq(
-          RichDefinedText(
+          VocabularyRecord(
             "duck",
             "noun",
             "/dʌk/",
@@ -271,7 +271,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option(1d),
             testTimestamp
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "peevish",
             "adjective",
             "ˈpiːvɪʃ",
@@ -288,7 +288,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option(1d),
             testTimestamp
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "diehard",
             "noun",
             "ˈdʌɪhɑːd",
@@ -314,7 +314,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val usageDf = translatedDf.withColumn(USAGE, lit(1d))
       Mockito.when(usageFrequencyApi.findUsageFrequency(ArgumentMatchers.any())).thenReturn(usageDf)
 
-      val expected = Mockito.mock(classOf[Dataset[RichDefinedText]])
+      val expected = Mockito.mock(classOf[Dataset[VocabularyRecord]])
       Mockito.doReturn(expected, Nil: _*).when(testObj).updateArea(ArgumentMatchers.any())
 
       val actual = testObj.upsert(silverSnapshot)
@@ -401,7 +401,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
         )
       )
       val actual   = testObj.upsert(silverSnapshot).toDF()
-      val expected = spark.emptyDataset[RichDefinedText].toDF()
+      val expected = spark.emptyDataset[VocabularyRecord].toDF()
 
       assertDataFrameDataEquals(actual, expected)
     }
@@ -413,7 +413,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val area = new GoldenArea(areaPath, null, null, null)
       val updates = spark.createDataset(
         Seq(
-          RichDefinedText(
+          VocabularyRecord(
             "duck",
             "noun",
             "/dʌk/",
@@ -430,7 +430,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option(1d),
             testTimestamp
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "peevish",
             "adjective",
             "ˈpiːvɪʃ",
@@ -447,7 +447,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option(1d),
             testTimestamp
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "diehard",
             "noun",
             "ˈdʌɪhɑːd",
@@ -476,7 +476,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val area            = new GoldenArea(areaPath, null, null, null)
       val initialState = spark.createDataset(
         Seq(
-          RichDefinedText(
+          VocabularyRecord(
             "duck",
             "noun",
             "/dʌk/",
@@ -493,7 +493,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option(1d),
             firstTimestamp
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "diehard",
             "noun",
             "ˈdʌɪhɑːd",
@@ -516,7 +516,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
 
       val updates = spark.createDataset(
         Seq(
-          RichDefinedText(
+          VocabularyRecord(
             "duck",
             "noun",
             "/dʌk/",
@@ -533,7 +533,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option.empty,
             secondTimestamp
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "peevish",
             "adjective",
             "ˈpiːvɪʃ",
@@ -555,7 +555,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val actual = area.updateArea(updates)
       val expectedUpdates = spark.createDataset(
         Seq(
-          RichDefinedText(
+          VocabularyRecord(
             "duck",
             "noun",
             "/dʌk/",
@@ -572,7 +572,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option(1d),
             secondTimestamp
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "peevish",
             "adjective",
             "ˈpiːvɪʃ",
@@ -593,7 +593,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       )
       val expectedUnchangedRecords = spark.createDataset(
         Seq(
-          RichDefinedText(
+          VocabularyRecord(
             "diehard",
             "noun",
             "ˈdʌɪhɑːd",
@@ -621,7 +621,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
       val area            = new GoldenArea(areaPath, null, null, null)
       val initialState = spark.createDataset(
         Seq(
-          RichDefinedText(
+          VocabularyRecord(
             "duck",
             "noun",
             "/dʌk/",
@@ -638,7 +638,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
             Option(1d),
             testTimestamp
           ),
-          RichDefinedText(
+          VocabularyRecord(
             "diehard",
             "noun",
             "ˈdʌɪhɑːd",
@@ -658,7 +658,7 @@ class GoldenAreaTest extends ApplicationManagedAreaTestBase {
         ))
       area.updateArea(initialState)
       val expected = spark.table(area.fullTableName)
-      val updates  = spark.emptyDataset[RichDefinedText]
+      val updates  = spark.emptyDataset[VocabularyRecord]
       val actual   = area.updateArea(updates)
       assertDataFrameDataEquals(expected.toDF(), actual.toDF())
     }

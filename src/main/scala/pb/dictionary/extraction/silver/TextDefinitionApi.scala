@@ -5,7 +5,7 @@ import pb.dictionary.extraction.bronze.CleansedText
 
 /** Enriches [[DataFrame]] with dictionary definition and normalized text form.
   */
-trait WordDefinitionApi {
+trait TextDefinitionApi {
 
   /**
     * Enriches [[DataFrame]] with [[DefinedText.DEFINITION]], [[DefinedText.NORMALIZED_TEXT]]

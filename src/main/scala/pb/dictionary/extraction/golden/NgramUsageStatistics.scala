@@ -6,9 +6,10 @@ import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import pb.dictionary.extraction.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher}
+import pb.dictionary.extraction.RemoteHttpDfEnricher
+import pb.dictionary.extraction.enrichment.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher}
 import pb.dictionary.extraction.golden.NgramUsageStatistics._
-import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner.SafeSingleTaskRps
+import pb.dictionary.extraction.silver.DictionaryApiDevTextDefiner.SafeSingleTaskRps
 import pb.dictionary.extraction.silver.PartOfSpeech
 
 import scala.util.Try
@@ -17,13 +18,13 @@ import scala.util.Try
   * in the Google books and all words in Google books. More information at: [[https://books.google.com/ngrams/info#]].
   *
   * The usage statistics is queried with respect to text part of speech, if it is defined. This possibly
-  * leads to the [[RichDefinedText.USAGE]] overestimation for text from unknown part of speech, cause
+  * leads to the [[VocabularyRecord.USAGE]] overestimation for text from unknown part of speech, cause
   * all the meanings are summed up in this case, regarding how it is used in the sentence.
   *
   * @param dfEnricher a DataFrame wrapper for [[NgramEnricher]]
   */
 class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyApi {
-  private val ngramSearchColNames = Seq(RichDefinedText.NORMALIZED_TEXT, RichDefinedText.PART_OF_SPEECH)
+  private val ngramSearchColNames = Seq(VocabularyRecord.NORMALIZED_TEXT, VocabularyRecord.PART_OF_SPEECH)
   private val ngramSearchCols     = ngramSearchColNames.map(col)
   private val rawEnrichmentCol    = "rawDefinition"
 
@@ -40,7 +41,7 @@ class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyAp
       .as(sourceAlias)
       .join(textBooksUsageDf.as(enrichedAlias),
             ngramSearchColNames.map(cn => col(s"$sourceAlias.$cn") <=> col(s"$enrichedAlias.$cn")).reduce(_ && _))
-      .select(col(s"$sourceAlias.*"), col(RichDefinedText.USAGE))
+      .select(col(s"$sourceAlias.*"), col(VocabularyRecord.USAGE))
     dataBooksUsageDf
   }
 
@@ -62,7 +63,7 @@ class NgramUsageStatistics(dfEnricher: NgramDfEnricher) extends UsageFrequencyAp
         ): _*)
     val textUsageDf = firstLevelExplodedDf
       .groupBy(ngramSearchCols: _*)
-      .agg(avg(NgramUsage.TIMESERIES) as RichDefinedText.USAGE)
+      .agg(avg(NgramUsage.TIMESERIES) as VocabularyRecord.USAGE)
     textUsageDf
   }
 }
@@ -130,8 +131,8 @@ abstract class NgramEnricher(corpus: String, yearStart: Int, yearEnd: Int)(
   }
 
   override protected def buildRequest(record: Row) = {
-    val text            = record.getAs[String](RichDefinedText.NORMALIZED_TEXT)
-    val partOfSpeech    = record.getAs[String](RichDefinedText.PART_OF_SPEECH)
+    val text            = record.getAs[String](VocabularyRecord.NORMALIZED_TEXT)
+    val partOfSpeech    = record.getAs[String](VocabularyRecord.PART_OF_SPEECH)
     val partOfSpeechTag = partOfSpeechMapping.get(partOfSpeech).map(v => s"_${v}").getOrElse("")
     val uri = new URIBuilder(NgramUsageStatistics.ApiEndpoint)
       .addParameter("content", s"$text$partOfSpeechTag:$corpus")

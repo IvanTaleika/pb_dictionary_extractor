@@ -42,6 +42,5 @@ object PocketBookMark extends ProductCompanion[PocketBookMark] {
   }
 
   override val pk: Seq[String]         = Seq(OID)
-  override val attributes: Seq[String] = Seq(VAL, TITLE, AUTHORS, TIME_EDT)
   override val metadata: Seq[String]   = Seq.empty
 }

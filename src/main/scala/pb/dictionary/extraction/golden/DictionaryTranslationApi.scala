@@ -7,6 +7,6 @@ import org.apache.spark.sql.DataFrame
   */
 trait DictionaryTranslationApi {
 
-  /** Enriches [[DataFrame]] with [[RichDefinedText.TRANSLATIONS]] column. */
+  /** Enriches [[DataFrame]] with [[VocabularyRecord.TRANSLATIONS]] column. */
   def translate(df: DataFrame): DataFrame
 }

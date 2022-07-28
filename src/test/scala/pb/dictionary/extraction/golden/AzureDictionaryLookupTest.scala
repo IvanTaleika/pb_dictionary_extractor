@@ -6,16 +6,17 @@ import org.apache.http.util.EntityUtils
 import org.apache.spark.sql.Row
 import org.apache.spark.SparkException
 import org.mockito.{ArgumentMatchers, Mockito}
-import pb.dictionary.extraction.{EnricherTestUtils, RemoteHttpEnrichmentException, TestBase}
+import pb.dictionary.extraction.{EnricherTestUtils, TestBase}
 import pb.dictionary.extraction.golden.AzureDictionaryLookup.{DfEnricher, DictionaryLookupRequest}
 import pb.dictionary.extraction.golden.AzureDictionaryLookupEnricher.{AZURE_SERVICE_ERROR_RETRY_INTERVAL, MAX_RETRIES}
 import EnricherTestUtils._
+import pb.dictionary.extraction.enrichment.RemoteHttpEnrichmentException
 
 import java.nio.charset.StandardCharsets
 
 class AzureDictionaryLookupTest extends TestBase {
 
-  import pb.dictionary.extraction.golden.RichDefinedText._
+  import pb.dictionary.extraction.golden.VocabularyRecord._
 
   val sourceSchema = s"$NORMALIZED_TEXT String, $PART_OF_SPEECH String, $FORMS array<string>, $DEFINITION String"
   val finalSchema = s"$sourceSchema, $TRANSLATIONS array<string>"

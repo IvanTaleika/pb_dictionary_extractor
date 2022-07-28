@@ -7,11 +7,12 @@ import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.message.BasicStatusLine
 import org.apache.http.protocol.HttpContext
 import org.apache.spark.SparkException
-import pb.dictionary.extraction.{RemoteHttpEnrichmentException, TestBase}
+import pb.dictionary.extraction.TestBase
 import pb.dictionary.extraction.bronze.CleansedText
-import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner.DictionaryApiDevDfEnricher
+import pb.dictionary.extraction.enrichment.RemoteHttpEnrichmentException
+import pb.dictionary.extraction.silver.DictionaryApiDevTextDefiner.DictionaryApiDevDfEnricher
 
-class DictionaryApiDevWordDefinerTest extends TestBase {
+class DictionaryApiDevTextDefinerTest extends TestBase {
   import pb.dictionary.extraction.bronze.CleansedText._
 
   val sourceSchema =
@@ -42,7 +43,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
           HttpStatus.SC_SERVICE_UNAVAILABLE,
           ""
         )
-        val definer = new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(testClient))
+        val definer = new DictionaryApiDevTextDefiner(new DictionaryApiDevDfEnricher(testClient))
         val actual = the[SparkException] thrownBy (definer.define(df).collect())
         actual.getCause shouldBe a [RemoteHttpEnrichmentException]
       }
@@ -62,7 +63,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
             |}
             |""".stripMargin
         )
-        val definer = new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(testClient))
+        val definer = new DictionaryApiDevTextDefiner(new DictionaryApiDevDfEnricher(testClient))
         val actual  = definer.define(df)
         val expected = spark.createDataset(
           Seq(
@@ -129,7 +130,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
             |]
             |""".stripMargin
         )
-        val definer = new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(testClient))
+        val definer = new DictionaryApiDevTextDefiner(new DictionaryApiDevDfEnricher(testClient))
         val actual  = definer.define(df)
         val expected = spark.createDataset(
           Seq(
@@ -211,7 +212,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
               |]
               |""".stripMargin
           )
-          val definer = new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(testClient))
+          val definer = new DictionaryApiDevTextDefiner(new DictionaryApiDevDfEnricher(testClient))
           val actual  = definer.define(df)
           val expected = spark.createDataset(
             Seq(
@@ -293,7 +294,7 @@ class DictionaryApiDevWordDefinerTest extends TestBase {
               |]
               |""".stripMargin
           )
-          val definer = new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(testClient))
+          val definer = new DictionaryApiDevTextDefiner(new DictionaryApiDevDfEnricher(testClient))
           val actual  = definer.define(df)
           val expected = spark.createDataset(
             Seq(

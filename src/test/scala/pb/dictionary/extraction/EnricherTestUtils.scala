@@ -7,6 +7,7 @@ import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.message.BasicStatusLine
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.invocation.InvocationOnMock
+import pb.dictionary.extraction.enrichment.RemoteHttpEnricher
 
 object EnricherTestUtils {
 

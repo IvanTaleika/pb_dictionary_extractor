@@ -5,14 +5,10 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField}
-import pb.dictionary.extraction.{
-  ParallelRemoteHttpEnricher,
-  RemoteHttpDfEnricher,
-  RemoteHttpEnricher,
-  RemoteHttpEnrichmentException
-}
+import pb.dictionary.extraction.RemoteHttpEnrichmentException
 import pb.dictionary.extraction.bronze.CleansedText
-import pb.dictionary.extraction.silver.DictionaryApiDevWordDefiner._
+import pb.dictionary.extraction.enrichment.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher, RemoteHttpEnrichmentException}
+import pb.dictionary.extraction.silver.DictionaryApiDevTextDefiner._
 
 import java.net.URLEncoder
 import javax.net.ssl.SSLHandshakeException
@@ -23,7 +19,7 @@ import scala.util.Try
   *
   * @param dfEnricher a DataFrame wrapper for [[DictionaryApiDevEnricher]]
   */
-class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDevDfEnricher) extends WordDefinitionApi {
+class DictionaryApiDevTextDefiner protected[silver](dfEnricher: DictionaryApiDevDfEnricher) extends TextDefinitionApi {
   private val rawDefinitionCol = "rawDefinition"
 
   def define(df: Dataset[CleansedText]): DataFrame = {
@@ -88,7 +84,7 @@ class DictionaryApiDevWordDefiner protected[silver] (dfEnricher: DictionaryApiDe
 
 }
 
-object DictionaryApiDevWordDefiner {
+object DictionaryApiDevTextDefiner {
   type DictionaryApiDevDfEnricher = RemoteHttpDfEnricher[CleansedText, Row]
   val ApiEndpoint = "https://api.dictionaryapi.dev/api/v2/entries/en"
 
@@ -96,12 +92,12 @@ object DictionaryApiDevWordDefiner {
   val SafeSingleTaskRps: Double = 1.49
 
   def apply(maxConcurrentConnections: Int = 1,
-            singleTaskRps: Option[Double] = Option(SafeSingleTaskRps)): DictionaryApiDevWordDefiner = {
+            singleTaskRps: Option[Double] = Option(SafeSingleTaskRps)): DictionaryApiDevTextDefiner = {
     val enricher: Option[Double] => DictionaryApiDevEnricher with DictionaryApiDevParallelHttpEnricher =
       new DictionaryApiDevEnricher(_) with DictionaryApiDevParallelHttpEnricher {
         override protected val concurrentConnections = maxConcurrentConnections
       }
-    new DictionaryApiDevWordDefiner(new DictionaryApiDevDfEnricher(enricher, singleTaskRps))
+    new DictionaryApiDevTextDefiner(new DictionaryApiDevDfEnricher(enricher, singleTaskRps))
   }
 
   object ResponseStructure {
@@ -147,8 +143,8 @@ object DictionaryApiDevWordDefiner {
 /** Enriches [[CleansedText]] with string column that contains [[ResponseStructure]] JSON. */
 abstract class DictionaryApiDevEnricher(singleTaskRps: Option[Double] = Option(SafeSingleTaskRps))
     extends RemoteHttpEnricher[CleansedText, Row](singleTaskRps) {
-  def enrich(cleansedWord: CleansedText): Row = {
-    Row.fromSeq(cleansedWord.productIterator.toSeq :+ requestEnrichment(cleansedWord))
+  def enrich(cleansedText: CleansedText): Row = {
+    Row.fromSeq(cleansedText.productIterator.toSeq :+ requestEnrichment(cleansedText))
   }
 
   override protected def buildRequest(record: CleansedText) = {

@@ -16,7 +16,7 @@ import java.sql.Timestamp
   *
   * Each invocation fully rewrites the sheet, default implementation provides no sheet backups.
   *
-  * The data area must be created by a user. The application requires [[UndefinedRow]] schema to be static.
+  * The data area must be created by a user. The application requires [[SheetsUndefinedRow]] schema to be static.
   * Sheet schema is validated on each run. However, user changes to manual enrichment sheet are not preserved.
   * The user must copy defined word to a vocabulary area instead.
   */
@@ -26,14 +26,14 @@ class SheetsManualEnrichmentArea(
     protected val spreadsheetsService: Sheets,
     protected val timestampProvider: () => Timestamp,
     protected val nBackupSheetsToKeep: Int = 0
-) extends GoogleSheetsArea[UndefinedRow] {
-  import UndefinedRow._
+) extends GoogleSheetsArea[SheetsUndefinedRow] {
+  import SheetsUndefinedRow._
   import spark.implicits._
 
   def rewrite[T <: FinalPublishProduct](
       silverSnapshot: Dataset[DefinedText],
       publishSnapshot: Dataset[T]
-  ): Dataset[UndefinedRow] = {
+  ): Dataset[SheetsUndefinedRow] = {
     val cachedSnapshot = snapshot.cache()
     silverSnapshot.transform(fromSilver).transform(unpublished(publishSnapshot)).transform(write(cachedSnapshot, _))
   }
@@ -49,11 +49,11 @@ class SheetsManualEnrichmentArea(
         AreaUtils.timestampToString(col(FIRST_OCCURRENCE)) as FIRST_OCCURRENCE,
         AreaUtils.timestampToString(col(LATEST_OCCURRENCE)) as LATEST_OCCURRENCE,
       )
-      .as[UndefinedRow]
+      .as[SheetsUndefinedRow]
   }
 
-  private def unpublished[T <: FinalPublishProduct](publishSnapshot: Dataset[T])(undefined: Dataset[UndefinedRow]) = {
+  private def unpublished[T <: FinalPublishProduct](publishSnapshot: Dataset[T])(undefined: Dataset[SheetsUndefinedRow]) = {
     val unpublished = undefined.join(publishSnapshot, col(FinalPublishProduct.FORMS).contains(col(TEXT)), "left_anti")
-    unpublished.as[UndefinedRow]
+    unpublished.as[SheetsUndefinedRow]
   }
 }

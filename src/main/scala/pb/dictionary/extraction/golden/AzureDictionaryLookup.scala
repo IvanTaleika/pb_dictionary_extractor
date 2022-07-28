@@ -9,38 +9,33 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField}
-import pb.dictionary.extraction.{
-  ParallelRemoteHttpEnricher,
-  RemoteHttpDfEnricher,
-  RemoteHttpEnricher,
-  RemoteHttpEnrichmentException
-}
+import pb.dictionary.extraction.RemoteHttpEnrichmentException
 import pb.dictionary.extraction.silver.PartOfSpeech
 import AzureDictionaryLookup._
+import pb.dictionary.extraction.enrichment.{ParallelRemoteHttpEnricher, RemoteHttpDfEnricher, RemoteHttpEnricher, RemoteHttpEnrichmentException}
 
 import scala.util.Try
 
 /** Enriches defined text with translations powered by Azure Translate service:
   * [[https://docs.microsoft.com/en-us/azure/cognitive-services/translator/reference/v3-0-dictionary-lookup]].
-  * This service run queries for each [[RichDefinedText.NORMALIZED_TEXT]] value, not for each [[RichDefinedText.DEFINITION]]
+  * This service run queries for each [[VocabularyRecord.NORMALIZED_TEXT]] value, not for each [[VocabularyRecord.DEFINITION]]
   *
-  * In addition to populating the [[RichDefinedText.TRANSLATIONS]] column, algorithm extends [[RichDefinedText.FORMS]]
+  * In addition to populating the [[VocabularyRecord.TRANSLATIONS]] column, algorithm extends [[VocabularyRecord.FORMS]]
   * array with [[ResponseStructure.DictionaryLookup.DISPLAY_SOURCE]] if it is not present already.
   * This value corresponds to the preferred way of text writing and usually only differ in case.
   *
   * It is impossible to automatically detect which text definition corresponds to which text translation.
   * In case a text has several definitions and translations they are linked with each other using following rules:
-  *   - A definition is enriched with all the translations were [[RichDefinedText.PART_OF_SPEECH]] matches
+  *   - A definition is enriched with all the translations were [[VocabularyRecord.PART_OF_SPEECH]] matches
   *     [[ResponseStructure.Translation.POS_TAG]].
-  *   - In case [[ResponseStructure.Translation.POS_TAG]] does not match [[RichDefinedText.PART_OF_SPEECH]] of any definition
-  *     it is added to the [[RichDefinedText.TRANSLATIONS]] for all the definitions.
-  *   - In case no translation found for a [[RichDefinedText.NORMALIZED_TEXT]], [[RichDefinedText.TRANSLATIONS]]
+  *   - In case [[ResponseStructure.Translation.POS_TAG]] does not match [[VocabularyRecord.PART_OF_SPEECH]] of any definition
+  *     it is added to the [[VocabularyRecord.TRANSLATIONS]] for all the definitions.
+  *   - In case no translation found for a [[VocabularyRecord.NORMALIZED_TEXT]], [[VocabularyRecord.TRANSLATIONS]]
   *     is populated with an empty array.
-  *   - In case translations are returned by the API, but all of them have match [[RichDefinedText.PART_OF_SPEECH]]
-  *     of the other definition, [[RichDefinedText.TRANSLATIONS]] is populated with an empty array.
+  *   - In case translations are returned by the API, but all of them have match [[VocabularyRecord.PART_OF_SPEECH]]
+  *     of the other definition, [[VocabularyRecord.TRANSLATIONS]] is populated with an empty array.
   *
-  *
-  * @param dfEnricher a DataFrame wrapper for [[AzureDictionaryLookupEnricher]]
+ * @param dfEnricher a DataFrame wrapper for [[AzureDictionaryLookupEnricher]]
   */
 class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends DictionaryTranslationApi {
   private val rawTranslationCol = "rawDefinition"
@@ -72,7 +67,7 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
   def translate(goldenUpdates: DataFrame): DataFrame = {
     val spark = SparkSession.active
     import spark.implicits._
-    val textDf = goldenUpdates.select(RichDefinedText.NORMALIZED_TEXT).distinct().as[String]
+    val textDf = goldenUpdates.select(VocabularyRecord.NORMALIZED_TEXT).distinct().as[String]
     val rawTranslationEncoder =
       RowEncoder.apply(textDf.schema.add(StructField(rawTranslationCol, StringType, nullable = true)))
     val translatedText    = dfEnricher.enrich(textDf, rawTranslationEncoder)
@@ -123,9 +118,9 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
     val formattedTranslations = parsedTranslations.na
       .replace(Translation.POS_TAG, partOfSpeechMapping)
       // Ease the self-join with partOfSpeechNoMatches by using a rowNumber instead of natural PK
-      .withColumn(translationsRnCol, row_number().over(Window.orderBy(RichDefinedText.NORMALIZED_TEXT)))
+      .withColumn(translationsRnCol, row_number().over(Window.orderBy(VocabularyRecord.NORMALIZED_TEXT)))
       // Renaming a column so it won't be ambiguous to drop it at the end
-      .withColumnRenamed(RichDefinedText.NORMALIZED_TEXT, translatedTextCol)
+      .withColumnRenamed(VocabularyRecord.NORMALIZED_TEXT, translatedTextCol)
       .cache()
 
     // Translations with part of speech that does not match any definition of the normalized text.
@@ -133,8 +128,8 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
       formattedTranslations
         .join(
           goldenUpdates,
-          col(RichDefinedText.NORMALIZED_TEXT) === col(translatedTextCol) &&
-            col(Translation.POS_TAG).contains(col(RichDefinedText.PART_OF_SPEECH)),
+          col(VocabularyRecord.NORMALIZED_TEXT) === col(translatedTextCol) &&
+            col(Translation.POS_TAG).contains(col(VocabularyRecord.PART_OF_SPEECH)),
           "left_anti"
         )
         .select(col(translationsRnCol) as unmatchedTranslationsRnCol, lit(true) as noMatchesCol)
@@ -146,8 +141,8 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
     val explodedGoldenUpdates = goldenUpdates
       .join(
         markedTranslations,
-        col(RichDefinedText.NORMALIZED_TEXT) === col(translatedTextCol) &&
-          (col(noMatchesCol) || col(Translation.POS_TAG).contains(col(RichDefinedText.PART_OF_SPEECH))),
+        col(VocabularyRecord.NORMALIZED_TEXT) === col(translatedTextCol) &&
+          (col(noMatchesCol) || col(Translation.POS_TAG).contains(col(VocabularyRecord.PART_OF_SPEECH))),
         "left_outer"
       )
 
@@ -157,7 +152,7 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
         DictionaryLookup.DISPLAY_SOURCE,
         first(col(DictionaryLookup.DISPLAY_SOURCE)) over (
           Window
-            .partitionBy(RichDefinedText.NORMALIZED_TEXT)
+            .partitionBy(VocabularyRecord.NORMALIZED_TEXT)
             .orderBy(col(DictionaryLookup.DISPLAY_SOURCE).asc_nulls_last)
             .rangeBetween(
               Window.unboundedPreceding,
@@ -168,12 +163,12 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
       // Adding pretty-printed text form to possible forms with the same definition
       .withColumn(
         DictionaryLookup.DISPLAY_SOURCE,
-        collect_set(DictionaryLookup.DISPLAY_SOURCE) over (Window.partitionBy(RichDefinedText.pkCols: _*))
+        collect_set(DictionaryLookup.DISPLAY_SOURCE) over (Window.partitionBy(VocabularyRecord.pkCols(): _*))
       )
       .withColumn(
-        RichDefinedText.FORMS,
+        VocabularyRecord.FORMS,
         // Api promise that DictionaryLookup.DISPLAY_SOURCE won't be null
-        array_union(col(RichDefinedText.FORMS), col(DictionaryLookup.DISPLAY_SOURCE))
+        array_union(col(VocabularyRecord.FORMS), col(DictionaryLookup.DISPLAY_SOURCE))
       )
       // Filling translation with possible prefixes
       .withColumn(
@@ -184,14 +179,14 @@ class AzureDictionaryLookup protected[golden] (dfEnricher: DfEnricher) extends D
         ).otherwise(col(Translation.DISPLAY_TARGET))
       )
       .withColumn(
-        RichDefinedText.TRANSLATIONS,
+        VocabularyRecord.TRANSLATIONS,
         // Collect_set does not store nulls
-        collect_set(col(Translation.DISPLAY_TARGET)) over (Window.partitionBy(RichDefinedText.pkCols: _*))
+        collect_set(col(Translation.DISPLAY_TARGET)) over (Window.partitionBy(VocabularyRecord.pkCols(): _*))
       )
       // dropping temporary translation columns
       .drop(markedTranslations.columns: _*)
       // dropping duplicates produced by multiple translations to a single word
-      .dropDuplicates(RichDefinedText.pk)
+      .dropDuplicates(VocabularyRecord.pk)
     enrichedGoldenUpdates
   }
 }

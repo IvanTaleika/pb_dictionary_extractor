@@ -1,4 +1,4 @@
-package pb.dictionary.extraction
+package pb.dictionary.extraction.enrichment
 
 import com.google.common.util.concurrent.RateLimiter
 import grizzled.slf4j.Logger
@@ -8,6 +8,7 @@ import org.apache.http.impl.client.{CloseableHttpClient, HttpClientBuilder}
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
 import org.apache.http.util.EntityUtils
 import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
+import pb.dictionary.extraction.PbDictionaryException
 
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.locks.{ReentrantLock, ReentrantReadWriteLock}

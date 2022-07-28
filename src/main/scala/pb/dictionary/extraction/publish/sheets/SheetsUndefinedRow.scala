@@ -3,7 +3,7 @@ package pb.dictionary.extraction.publish.sheets
 import pb.dictionary.extraction.ProductCompanion
 
 /** Represents a PocketBook text highlight token that wasn't enriched by the definition automatically. */
-case class UndefinedRow(
+case class SheetsUndefinedRow(
     text: String,
     books: String,
     occurrences: Int,
@@ -11,7 +11,7 @@ case class UndefinedRow(
     latestOccurrence: String
 )
 
-object UndefinedRow extends ProductCompanion[UndefinedRow] {
+object SheetsUndefinedRow extends ProductCompanion[SheetsUndefinedRow] {
   implicit val manualEnrichmentAreaDescriptor: this.type = this
 
   val TEXT            = "text"
@@ -22,6 +22,5 @@ object UndefinedRow extends ProductCompanion[UndefinedRow] {
   val FIRST_OCCURRENCE  = "firstOccurrence"
   val LATEST_OCCURRENCE = "latestOccurrence"
 
-  override val attributes: Seq[String] = Seq(OCCURRENCES, BOOKS, FIRST_OCCURRENCE, LATEST_OCCURRENCE)
   override val metadata: Seq[String]   = Seq.empty
 }

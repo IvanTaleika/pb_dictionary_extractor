@@ -8,7 +8,7 @@ import pb.dictionary.extraction.bronze.BronzeArea
 import pb.dictionary.extraction.device.{PocketBookMark, PocketBookMarksArea}
 import pb.dictionary.extraction.golden._
 import pb.dictionary.extraction.publish.sheets.{GoogleServicesFactory, SheetsManualEnrichmentArea, SheetsPublishArea}
-import pb.dictionary.extraction.silver.{DictionaryApiDevWordDefiner, SilverArea}
+import pb.dictionary.extraction.silver.{DictionaryApiDevTextDefiner, SilverArea}
 import pb.dictionary.extraction.stage.StageArea
 import pb.dictionary.extraction.utils.FileUtils
 
@@ -60,7 +60,7 @@ class AppTest extends TestBase {
 
       val stageArea  = new StageArea(stageAreaPath, timestampProvider)
       val bronzeArea = new BronzeArea(bronzeAreaPath, timestampProvider)
-      val silverArea = new SilverArea(silverAreaPath, DictionaryApiDevWordDefiner(), timestampProvider)
+      val silverArea = new SilverArea(silverAreaPath, DictionaryApiDevTextDefiner(), timestampProvider)
       val goldenArea =
         new GoldenArea(goldenAreaPath, azureDictionaryTranslation, NgramUsageStatistics(), timestampProvider)
       val manualEnrichmentArea =

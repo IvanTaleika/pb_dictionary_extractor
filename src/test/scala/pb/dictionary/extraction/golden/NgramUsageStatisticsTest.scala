@@ -5,16 +5,17 @@ import org.apache.http.client.methods.HttpUriRequest
 import org.apache.spark.sql.Row
 import org.apache.spark.SparkException
 import org.mockito.{ArgumentMatchers, Mockito}
-import pb.dictionary.extraction.{RemoteHttpEnrichmentException, TestBase}
+import pb.dictionary.extraction.TestBase
 import pb.dictionary.extraction.golden.NgramUsageStatistics.NgramDfEnricher
 import pb.dictionary.extraction.EnricherTestUtils._
+import pb.dictionary.extraction.enrichment.RemoteHttpEnrichmentException
 
 // NOTE!!! DataFrame asserts hangs on rdd.unpersist step if `NgramDfEnricher` throw an exception.
 // The reason is unknown. This does not happen with `DictionaryApiDevWordDefiner`, nor it was fixed
 // by modifying the DAG in any ways. The issue is in unpersist call, so real run is not affected.
 // In case execution hangs for several minutes, app must be manually stopped.
 class NgramUsageStatisticsTest extends TestBase {
-  import pb.dictionary.extraction.golden.RichDefinedText._
+  import pb.dictionary.extraction.golden.VocabularyRecord._
 
   val sourceSchema = s"$NORMALIZED_TEXT String, $PART_OF_SPEECH String, $OCCURRENCES Int"
   val finalSchema  = s"$sourceSchema, $USAGE double"

@@ -42,6 +42,7 @@ abstract class ApplicationManagedArea[Out <: ApplicationManagedProduct: Applicat
     val path: String,
     val format: String)
     extends Area[Out] {
+
   protected val absoluteTableLocation = Paths.get(path).toAbsolutePath
   val absoluteTablePath               = absoluteTableLocation.toUri.getPath
   val tableName                       = absoluteTableLocation.getFileName.toString

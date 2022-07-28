@@ -20,11 +20,16 @@ object CleansedText extends ApplicationManagedProductCompanion[CleansedText] {
   val TEXT            = "text"
   val pk: Seq[String] = Seq(TEXT)
 
-  val propagatingAttributes: Seq[String] = Seq.empty
+  val copiedAttributes: Seq[String] = Seq.empty
 
-  val BOOKS                           = "books"
-  val OCCURRENCES                     = "occurrences"
-  val FIRST_OCCURRENCE                = "firstOccurrence"
-  val LATEST_OCCURRENCE               = "latestOccurrence"
-  val enrichedAttributes: Seq[String] = Seq(BOOKS, OCCURRENCES, FIRST_OCCURRENCE, LATEST_OCCURRENCE)
+  val BOOKS             = "books"
+  val OCCURRENCES       = "occurrences"
+  val FIRST_OCCURRENCE  = "firstOccurrence"
+  val LATEST_OCCURRENCE = "latestOccurrence"
+
+  val transformedAttributes: Seq[String] =
+    Seq(TEXT, BOOKS, OCCURRENCES, FIRST_OCCURRENCE, LATEST_OCCURRENCE, UPDATED_AT)
+
+  val enrichedAttributes: Seq[String] = Seq.empty
+
 }

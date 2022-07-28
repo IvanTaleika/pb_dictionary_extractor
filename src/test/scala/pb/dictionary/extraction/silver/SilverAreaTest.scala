@@ -15,7 +15,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
     it("Should update text attributes without calling to definition API if the text is already defined") {
       import spark.implicits._
 
-      val wordDefinitionApi = mock[WordDefinitionApi]
+      val wordDefinitionApi = mock[TextDefinitionApi]
       (wordDefinitionApi.define _)
         .expects(new FunctionAdapter1[Dataset[CleansedText], Boolean](ds => ds.isEmpty))
         .returns(spark.emptyDataset[DefinedText].drop(UPDATED_AT))
@@ -394,7 +394,7 @@ class SilverAreaTest extends ApplicationManagedAreaTestBase {
         )
         .drop(UPDATED_AT)
 
-      val wordDefinitionApi = mock[WordDefinitionApi]
+      val wordDefinitionApi = mock[TextDefinitionApi]
       (wordDefinitionApi.define _)
         .expects(new FunctionAdapter1[Dataset[CleansedText], Boolean](actual => {
           assertDataFrameDataEquals(actual.toDF(), undefinedEntries.toDF())

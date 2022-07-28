@@ -3,7 +3,7 @@ package pb.dictionary.extraction.publish.sheets
 import pb.dictionary.extraction.publish.{FinalPublishProduct, FinalPublishProductCompanion}
 
 /** Represents a Google sheet row that correspond to a single vocabulary entry. */
-case class VocabularyRow(
+case class SheetsVocabularyRow(
     id: Int,
     status: String, // new / in progress / learned
     normalizedText: String,
@@ -24,7 +24,7 @@ case class VocabularyRow(
     notes: String,
 ) extends FinalPublishProduct
 
-object VocabularyRow extends FinalPublishProductCompanion[VocabularyRow] {
+object SheetsVocabularyRow extends FinalPublishProductCompanion[SheetsVocabularyRow] {
   implicit val googleSheetsAreaDescriptor: this.type = this
 
   val PART_OF_SPEECH    = "partOfSpeech"
@@ -41,27 +41,6 @@ object VocabularyRow extends FinalPublishProductCompanion[VocabularyRow] {
   val USAGE             = "usage"
   val TAGS              = "tags"
   val NOTES             = "notes"
-
-  val attributes: Seq[String] =
-    Seq(
-      NORMALIZED_TEXT,
-      PART_OF_SPEECH,
-      PHONETIC,
-      FORMS,
-      OCCURRENCES,
-      DEFINITION,
-      TRANSLATIONS,
-      STATUS,
-      SOURCES,
-      FIRST_OCCURRENCE,
-      LATEST_OCCURRENCE,
-      EXAMPLES,
-      SYNONYMS,
-      ANTONYMS,
-      USAGE,
-      TAGS,
-      NOTES
-    )
 
   val metadata: Seq[String] = Seq.empty
 

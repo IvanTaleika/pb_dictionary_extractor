@@ -20,14 +20,15 @@ object HighlightedText extends ApplicationManagedProductCompanion[HighlightedTex
   val OID             = "oid"
   val pk: Seq[String] = Seq(OID)
 
-  val TEXT                            = "text"
-  val enrichedAttributes: Seq[String] = Seq(TEXT)
-
   val TITLE   = "title"
   val AUTHORS = "authors"
 
   /** Stores time when the text was highlighted */
-  val TIME_EDT                           = "timeEdt"
-  val propagatingAttributes: Seq[String] = Seq(TITLE, AUTHORS, TIME_EDT)
+  val TIME_EDT                      = "timeEdt"
+  val copiedAttributes: Seq[String] = Seq(OID, TITLE, AUTHORS, TIME_EDT)
+
+  val TEXT                               = "text"
+  val transformedAttributes: Seq[String] = Seq(TEXT)
+  val enrichedAttributes: Seq[String]    = Seq.empty
 
 }

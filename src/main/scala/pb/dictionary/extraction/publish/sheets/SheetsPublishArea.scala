@@ -5,8 +5,8 @@ import com.google.api.services.sheets.v4.Sheets
 import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import pb.dictionary.extraction.golden.RichDefinedText
-import pb.dictionary.extraction.golden.RichDefinedText._
+import pb.dictionary.extraction.golden.VocabularyRecord
+import pb.dictionary.extraction.golden.VocabularyRecord._
 import pb.dictionary.extraction.utils.AreaUtils
 
 import java.sql.Timestamp
@@ -18,10 +18,10 @@ import java.util.regex.Pattern
   *
   * Each invocation fully rewrites the sheet, making a backup copy, if configured (5 copies by default).
   *
-  * The area is managed by user. The application requires [[VocabularyRow]] schema to be static.
+  * The area is managed by user. The application requires [[SheetsVocabularyRow]] schema to be static.
   * User attributes chages have precedence over automatic enrichment. __Note__ that array attributes
   * (that are stored as strings with separator) are merged, so all the deletes are reversed after a new population.
-  * [[VocabularyRow.pk]] columns are used for merges, so any changes there will spawn a new row in the spreadsheet.
+  * [[SheetsVocabularyRow.pk]] columns are used for merges, so any changes there will spawn a new row in the spreadsheet.
   */
 class SheetsPublishArea(
     val path: String,
@@ -29,14 +29,14 @@ class SheetsPublishArea(
     protected val spreadsheetsService: Sheets,
     protected val timestampProvider: () => Timestamp,
     protected val nBackupSheetsToKeep: Int = 5
-) extends GoogleSheetsArea[VocabularyRow] {
-  import VocabularyRow._
+) extends GoogleSheetsArea[SheetsVocabularyRow] {
+  import SheetsVocabularyRow._
   import spark.implicits._
 
   protected val arrayRecordsSeparator = "\n* "
 
   /** Merges updates from the [[pb.dictionary.extraction.golden.GoldenArea]] with user sheet changes. */
-  def merge(previousSnapshot: Dataset[RichDefinedText]): Dataset[VocabularyRow] = {
+  def merge(previousSnapshot: Dataset[VocabularyRecord]): Dataset[SheetsVocabularyRow] = {
     val preUpsertSnapshot = snapshot.cache()
     previousSnapshot.transform(fromGolden(preUpsertSnapshot)).transform(write(preUpsertSnapshot, _))
   }
@@ -44,7 +44,7 @@ class SheetsPublishArea(
   /** Transforms columns with types unsupported by the Google sheets and merges
     * user attribute updates with automatic pipeline attribute updates.
     */
-  private def fromGolden(preUpsertSnapshot: Dataset[VocabularyRow])(golden: Dataset[RichDefinedText]) = {
+  private def fromGolden(preUpsertSnapshot: Dataset[SheetsVocabularyRow])(golden: Dataset[VocabularyRecord]) = {
     val goldenAlias              = "golden"
     val publishedAlias           = "published"
     def colPublished(cn: String) = col(s"${publishedAlias}.${cn}")
@@ -53,7 +53,7 @@ class SheetsPublishArea(
     val mergedStates = preUpsertSnapshot
       .as(publishedAlias)
       .join(golden.as(goldenAlias),
-            RichDefinedText.pk.map(cn => colPublished(cn) === colGolden(cn)).reduce(_ && _),
+            VocabularyRecord.pk.map(cn => colPublished(cn) === colGolden(cn)).reduce(_ && _),
             "full_outer")
     // for calculated columns `collect` and `max().over()` generate the same DAG, except for
     // the last step where the value is either fetched to master or broadcasted. However, in case the column
@@ -63,7 +63,7 @@ class SheetsPublishArea(
     val rnCol             = "rowNumber"
     val newSheet = mergedStates
     // must run row_number after the join to exclude matched rows
-      .withColumn(rnCol, row_number().over(Window.partitionBy(ID).orderBy(colGolden(RichDefinedText.FIRST_OCCURRENCE))))
+      .withColumn(rnCol, row_number().over(Window.partitionBy(ID).orderBy(colGolden(VocabularyRecord.FIRST_OCCURRENCE))))
       .select(
         // attributes, not present in Golden area must be selected from the Sheet if present
         coalesce(colPublished(ID), col(rnCol) + lit(biggestSnapshotId)) as ID,
@@ -91,7 +91,7 @@ class SheetsPublishArea(
         coalesceEmptyString(colPublished(NOTES)) as NOTES
       )
 
-    newSheet.as[VocabularyRow]
+    newSheet.as[SheetsVocabularyRow]
   }
 
   private def coalesceEmptyString(cols: Column*) = {
@@ -106,8 +106,8 @@ class SheetsPublishArea(
     array_join(array_union(publishNotNullCol, goldenNotNullCol), arrayRecordsSeparator)
   }
 
-  override protected def write(preUpsertSnapshot: Dataset[VocabularyRow],
-                               postUpsertSnapshot: Dataset[VocabularyRow]): Dataset[VocabularyRow] = {
+  override protected def write(preUpsertSnapshot: Dataset[SheetsVocabularyRow],
+                               postUpsertSnapshot: Dataset[SheetsVocabularyRow]): Dataset[SheetsVocabularyRow] = {
     write(preUpsertSnapshot, postUpsertSnapshot.collect().toSeq.sortBy(_.id))
   }
 }

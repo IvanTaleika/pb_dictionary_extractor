@@ -1,6 +1,7 @@
 package pb.dictionary.extraction
 
 import org.scalatest.tags.Slow
+import pb.dictionary.extraction.enrichment.RemoteHttpEnricher
 
 import java.util.concurrent._
 import scala.collection.mutable.ArrayBuffer

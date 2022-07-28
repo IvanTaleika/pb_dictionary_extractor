@@ -4,8 +4,8 @@ import pb.dictionary.extraction.{ApplicationManagedProduct, ApplicationManagedPr
 
 import java.sql.Timestamp
 
-/** Represents an vocabulary record with supplementary enrichments. */
-case class RichDefinedText(
+// TODO: doc
+case class VocabularyRecord(
     normalizedText: String,
     partOfSpeech: String,
     phonetic: String,
@@ -23,13 +23,14 @@ case class RichDefinedText(
     updatedAt: Timestamp,
 ) extends ApplicationManagedProduct
 
-object RichDefinedText extends ApplicationManagedProductCompanion[RichDefinedText] {
+object VocabularyRecord extends ApplicationManagedProductCompanion[VocabularyRecord] {
   implicit val goldenAreaDescriptor: this.type = this
 
-  // silver
   val NORMALIZED_TEXT = "normalizedText"
   val DEFINITION      = "definition"
   val pk              = Seq(NORMALIZED_TEXT, DEFINITION)
+
+  val copiedAttributes: Seq[String] = pk
 
   val PART_OF_SPEECH    = "partOfSpeech"
   val PHONETIC          = "phonetic"
@@ -41,18 +42,18 @@ object RichDefinedText extends ApplicationManagedProductCompanion[RichDefinedTex
   val EXAMPLES          = "examples"
   val SYNONYMS          = "synonyms"
   val ANTONYMS          = "antonyms"
-  val propagatingAttributes: Seq[String] = Seq(
+
+  val transformedAttributes: Seq[String] = Seq(
     FORMS,
     BOOKS,
     OCCURRENCES,
     FIRST_OCCURRENCE,
     LATEST_OCCURRENCE,
-    // It is safer to not include these attributes into PK, cause dictionary API can be extended to return richer responses
     PHONETIC,
     PART_OF_SPEECH,
     SYNONYMS,
     ANTONYMS,
-    EXAMPLES,
+    EXAMPLES
   )
 
   /** Populated by [[DictionaryTranslationApi]] */
@@ -62,5 +63,4 @@ object RichDefinedText extends ApplicationManagedProductCompanion[RichDefinedTex
   val USAGE = "usage"
 
   val enrichedAttributes = Seq(TRANSLATIONS, USAGE)
-
 }
